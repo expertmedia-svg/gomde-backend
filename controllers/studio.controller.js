@@ -142,7 +142,37 @@ exports.saveAudioRecording = async (req, res) => {
     const parsedEffects = safeJsonParse(effects, { reverb: 0, autotune: 0 });
     const parsedLevels = safeJsonParse(channelLevels, { leadVox: 82, double: 64, beat: 76, fxBus: 48 });
     const parsedPan = safeJsonParse(channelPan, { leadVox: 0, double: -20, beat: 0, fxBus: 16 });
-    const parsedTimeline = safeJsonParse(timeline, { voiceOffset: 0, trimStart: 0, trimEnd: 0, duration: 0 });
+    const parsedTimeline = safeJsonParse(timeline, {
+      voiceOffset: 0,
+      trimStart: 0,
+      trimEnd: 0,
+      duration: 0,
+      currentPosition: 0,
+      zoom: 1,
+      loopEnabled: false,
+      loopStart: 0,
+      loopEnd: 0,
+      sections: []
+    });
+    const sanitizedTimeline = {
+      voiceOffset: Number(parsedTimeline.voiceOffset) || 0,
+      trimStart: Number(parsedTimeline.trimStart) || 0,
+      trimEnd: Number(parsedTimeline.trimEnd) || 0,
+      duration: Number(parsedTimeline.duration) || 0,
+      currentPosition: Number(parsedTimeline.currentPosition) || 0,
+      zoom: Number(parsedTimeline.zoom) || 1,
+      loopEnabled: parsedTimeline.loopEnabled === true,
+      loopStart: Number(parsedTimeline.loopStart) || 0,
+      loopEnd: Number(parsedTimeline.loopEnd) || 0,
+      sections: Array.isArray(parsedTimeline.sections)
+        ? parsedTimeline.sections.map((section) => ({
+            label: section?.label || 'Section',
+            start: Number(section?.start) || 0,
+            end: Number(section?.end) || 0,
+            color: section?.color || '#FFFFFF'
+          }))
+        : []
+    };
     const selectedInstrumental = instrumentalId ? await AudioTrack.findById(instrumentalId) : null;
     const shouldRenderMix = renderMix === true || renderMix === 'true';
 
@@ -158,7 +188,7 @@ exports.saveAudioRecording = async (req, res) => {
         instrumentalUrl: selectedInstrumental?.audioUrl,
         channelLevels: parsedLevels,
         effects: parsedEffects,
-        timeline: parsedTimeline
+        timeline: sanitizedTimeline
       });
 
       finalAudioUrl = renderedMix.audioUrl;
@@ -193,7 +223,7 @@ exports.saveAudioRecording = async (req, res) => {
         rawVoiceUrl: rawVoiceFile ? `/uploads/audio/${rawVoiceFile.filename}` : undefined,
         rawVoiceFileName: rawVoiceFile?.originalname,
         rawVoiceMimeType: rawVoiceFile?.mimetype,
-        timeline: parsedTimeline,
+        timeline: sanitizedTimeline,
         sourceRecordingId: sourceRecordingId || undefined
       }
     });

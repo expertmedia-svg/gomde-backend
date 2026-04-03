@@ -66,7 +66,20 @@ const audioTrackSchema = new mongoose.Schema({
       voiceOffset: { type: Number, default: 0 },
       trimStart: { type: Number, default: 0 },
       trimEnd: { type: Number, default: 0 },
-      duration: { type: Number, default: 0 }
+      duration: { type: Number, default: 0 },
+      currentPosition: { type: Number, default: 0 },
+      zoom: { type: Number, default: 1 },
+      loopEnabled: { type: Boolean, default: false },
+      loopStart: { type: Number, default: 0 },
+      loopEnd: { type: Number, default: 0 },
+      sections: [
+        {
+          label: { type: String, default: 'Section' },
+          start: { type: Number, default: 0 },
+          end: { type: Number, default: 0 },
+          color: { type: String, default: '#FFFFFF' }
+        }
+      ]
     },
     sourceRecordingId: {
       type: mongoose.Schema.Types.ObjectId,
