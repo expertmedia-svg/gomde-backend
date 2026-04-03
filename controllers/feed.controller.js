@@ -1,0 +1,117 @@
+const Video = require('../models/video');
+const Battle = require('../models/battle');
+
+exports.getSmartFeed = async (req, res) => {
+  try {
+    const { page = 1, limit = 10 } = req.query;
+    
+    // Get user's location if available
+    const userLocation = req.user?.profile?.city;
+    
+    // Get videos with computed scores
+    const videos = await Video.find({ isPublished: true })
+      .populate('user', 'username profile.avatar stats.score profile.city')
+      .lean();
+    
+    // Calculate score for each video
+    const scoredVideos = videos.map(video => {
+      const likes = video.likes.length;
+      const views = video.views;
+      const comments = video.comments.length;
+      const shares = video.shares;
+      
+      // Battle boost if video is from a battle
+      const battleBoost = video.battleId ? 50 : 0;
+      
+      // Freshness boost (newer videos get higher score)
+      const hoursSinceCreation = (Date.now() - new Date(video.createdAt)) / (1000 * 60 * 60);
+      const freshnessBoost = Math.max(0, 100 - hoursSinceCreation * 2);
+      
+      // Engagement rate
+      const totalInteractions = likes + comments + shares;
+      const engagementRate = views > 0 ? (totalInteractions / views) * 100 : 0;
+      
+      // Location boost
+      let locationBoost = 0;
+      if (userLocation && video.user.profile?.city === userLocation) {
+        locationBoost = 30;
+      }
+      
+      // Calculate final score
+      const score = 
+        (likes * 4) +
+        (views * 0.3) +
+        (comments * 5) +
+        (shares * 6) +
+        battleBoost +
+        freshnessBoost +
+        (engagementRate * 2) +
+        locationBoost;
+      
+      return { ...video, score };
+    });
+    
+    // Sort by score
+    scoredVideos.sort((a, b) => b.score - a.score);
+    
+    // Paginate
+    const start = (page - 1) * limit;
+    const paginatedVideos = scoredVideos.slice(start, start + limit);
+    
+    // Mix content types
+    const battles = await Battle.find({ status: 'active' })
+      .populate('creator', 'username profile.avatar')
+      .populate('entries.user', 'username profile.avatar')
+      .limit(3)
+      .lean();
+    
+    res.json({
+      videos: paginatedVideos,
+      battles,
+      currentPage: page,
+      hasMore: start + limit < scoredVideos.length
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error', error: error.message });
+  }
+};
+
+exports.getTrending = async (req, res) => {
+  try {
+    const { limit = 20 } = req.query;
+    
+    const videos = await Video.find({ isPublished: true })
+      .populate('user', 'username profile.avatar')
+      .sort({ views: -1, createdAt: -1 })
+      .limit(parseInt(limit));
+    
+    res.json(videos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.getLocalContent = async (req, res) => {
+  try {
+    const userLocation = req.user?.profile?.city;
+    
+    if (!userLocation) {
+      return res.json([]);
+    }
+    
+    const videos = await Video.find({ 
+      isPublished: true,
+      'user.profile.city': userLocation 
+    })
+      .populate('user', 'username profile.avatar profile.city')
+      .sort({ createdAt: -1 })
+      .limit(20);
+    
+    res.json(videos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};

@@ -1,0 +1,2181 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GOMDE — Battle Rap Platform</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Barlow:wght@300;400;500;600;700&family=Barlow+Condensed:wght@400;600;700&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --bg2: #111118;
+    --bg3: #1a1a25;
+    --surface: #1e1e2e;
+    --surface2: #252538;
+    --border: rgba(255,255,255,0.07);
+    --border2: rgba(255,255,255,0.13);
+    --accent: #ff3c3c;
+    --accent2: #ff6b35;
+    --gold: #f5c842;
+    --green: #2ecc71;
+    --blue: #4a9eff;
+    --purple: #9b59b6;
+    --text: #f0f0f0;
+    --text2: #9999aa;
+    --text3: #666675;
+    --radius: 10px;
+    --radius-lg: 16px;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: 'Barlow', sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  button { cursor: pointer; border: none; outline: none; font-family: inherit; }
+  input, textarea, select { font-family: inherit; outline: none; }
+  a { text-decoration: none; color: inherit; }
+
+  /* SCROLLBAR */
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg2); }
+  ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 3px; }
+
+  /* LAYOUT */
+  #app { display: flex; min-height: 100vh; }
+  .sidebar {
+    width: 240px; min-height: 100vh; background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex; flex-direction: column;
+    position: fixed; left: 0; top: 0; bottom: 0;
+    z-index: 100; transition: transform .3s;
+  }
+  .sidebar-logo {
+    padding: 24px 20px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .logo-text {
+    font-family: 'Bebas Neue', cursive;
+    font-size: 32px;
+    letter-spacing: 3px;
+    background: linear-gradient(135deg, var(--accent), var(--accent2));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+  .logo-sub { font-size: 10px; color: var(--text3); letter-spacing: 2px; text-transform: uppercase; margin-top: 2px; }
+  .sidebar-nav { flex: 1; padding: 16px 0; overflow-y: auto; }
+  .nav-section { padding: 8px 20px 4px; font-size: 10px; color: var(--text3); letter-spacing: 1.5px; text-transform: uppercase; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 20px; font-size: 14px; font-weight: 500;
+    color: var(--text2); cursor: pointer; transition: all .2s;
+    border-left: 3px solid transparent;
+  }
+  .nav-item:hover { background: var(--surface); color: var(--text); border-left-color: var(--border2); }
+  .nav-item.active { background: rgba(255,60,60,0.1); color: var(--accent); border-left-color: var(--accent); }
+  .nav-icon { width: 18px; height: 18px; display: flex; align-items: center; justify-content: center; font-size: 16px; }
+  .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); }
+  .user-mini {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px; background: var(--surface); border-radius: var(--radius);
+    cursor: pointer;
+  }
+  .user-mini:hover { background: var(--surface2); }
+  .avatar {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 14px; color: white; flex-shrink: 0;
+  }
+  .avatar.lg { width: 80px; height: 80px; font-size: 28px; }
+  .avatar.xl { width: 120px; height: 120px; font-size: 40px; }
+  .avatar.sm { width: 28px; height: 28px; font-size: 11px; }
+  .main-content {
+    flex: 1; margin-left: 240px; min-height: 100vh;
+    background: var(--bg);
+  }
+  .topbar {
+    height: 60px; background: rgba(10,10,15,0.9);
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 28px; position: sticky; top: 0; z-index: 50;
+    backdrop-filter: blur(10px);
+  }
+  .page-title { font-family: 'Bebas Neue', cursive; font-size: 22px; letter-spacing: 2px; color: var(--text); }
+  .topbar-actions { display: flex; align-items: center; gap: 12px; }
+
+  /* BUTTONS */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 13px; font-weight: 600; transition: all .2s;
+  }
+  .btn-primary {
+    background: var(--accent); color: white;
+  }
+  .btn-primary:hover { background: #ff5555; transform: translateY(-1px); }
+  .btn-secondary {
+    background: var(--surface2); color: var(--text);
+    border: 1px solid var(--border2);
+  }
+  .btn-secondary:hover { background: var(--surface); border-color: var(--border2); }
+  .btn-ghost { background: transparent; color: var(--text2); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--surface); color: var(--text); }
+  .btn-gold { background: var(--gold); color: #111; }
+  .btn-gold:hover { background: #ffd320; }
+  .btn-green { background: var(--green); color: white; }
+  .btn-green:hover { background: #27ae60; }
+  .btn-sm { padding: 5px 12px; font-size: 12px; }
+  .btn-lg { padding: 12px 24px; font-size: 15px; }
+  .btn-icon { padding: 8px; border-radius: 8px; }
+
+  /* CARDS */
+  .card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px;
+    transition: border-color .2s;
+  }
+  .card:hover { border-color: var(--border2); }
+  .card-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+  .card-title { font-size: 15px; font-weight: 600; color: var(--text); }
+  .card-subtitle { font-size: 12px; color: var(--text3); margin-top: 2px; }
+
+  /* GRID */
+  .grid { display: grid; gap: 20px; }
+  .grid-2 { grid-template-columns: repeat(2, 1fr); }
+  .grid-3 { grid-template-columns: repeat(3, 1fr); }
+  .grid-4 { grid-template-columns: repeat(4, 1fr); }
+  .page-content { padding: 28px; }
+
+  /* STATS */
+  .stat-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px;
+  }
+  .stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .stat-value { font-family: 'Bebas Neue', cursive; font-size: 36px; letter-spacing: 2px; line-height: 1; }
+  .stat-sub { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+  /* BADGES */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 2px 8px; border-radius: 20px; font-size: 11px; font-weight: 600;
+  }
+  .badge-red { background: rgba(255,60,60,0.15); color: var(--accent); }
+  .badge-green { background: rgba(46,204,113,0.15); color: var(--green); }
+  .badge-gold { background: rgba(245,200,66,0.15); color: var(--gold); }
+  .badge-blue { background: rgba(74,158,255,0.15); color: var(--blue); }
+  .badge-purple { background: rgba(155,89,182,0.15); color: var(--purple); }
+  .badge-gray { background: rgba(255,255,255,0.08); color: var(--text2); }
+
+  /* FORMS */
+  .form-group { margin-bottom: 16px; }
+  .form-label { display: block; font-size: 12px; font-weight: 600; color: var(--text2); margin-bottom: 6px; text-transform: uppercase; letter-spacing: .5px; }
+  .form-control {
+    width: 100%; background: var(--bg2); border: 1px solid var(--border2);
+    border-radius: 8px; padding: 10px 14px;
+    color: var(--text); font-size: 14px; transition: border-color .2s;
+  }
+  .form-control:focus { border-color: var(--accent); }
+  .form-control::placeholder { color: var(--text3); }
+  select.form-control { cursor: pointer; }
+  textarea.form-control { resize: vertical; min-height: 90px; }
+
+  /* TABS */
+  .tabs { display: flex; gap: 4px; background: var(--bg2); border-radius: 10px; padding: 4px; margin-bottom: 24px; }
+  .tab {
+    flex: 1; padding: 8px 16px; border-radius: 8px; font-size: 13px;
+    font-weight: 600; cursor: pointer; color: var(--text2); background: transparent;
+    transition: all .2s; text-align: center;
+  }
+  .tab.active { background: var(--accent); color: white; }
+  .tab:hover:not(.active) { background: var(--surface2); color: var(--text); }
+
+  /* BATTLE CARD */
+  .battle-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); overflow: hidden;
+    transition: all .2s;
+  }
+  .battle-card:hover { border-color: var(--border2); transform: translateY(-2px); }
+  .battle-header {
+    background: linear-gradient(135deg, rgba(255,60,60,0.12), rgba(74,158,255,0.08));
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .battle-vs {
+    display: flex; align-items: center; gap: 16px;
+    justify-content: center;
+  }
+  .battle-fighter { text-align: center; flex: 1; }
+  .vs-badge {
+    font-family: 'Bebas Neue', cursive; font-size: 28px;
+    color: var(--accent); letter-spacing: 2px;
+    background: rgba(255,60,60,0.1); border: 2px solid var(--accent);
+    border-radius: 50%; width: 48px; height: 48px;
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+  }
+  .fighter-name { font-weight: 700; font-size: 14px; margin-top: 8px; }
+  .fighter-city { font-size: 11px; color: var(--text3); }
+
+  /* AUDIO PLAYER */
+  .audio-player {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 12px 16px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  .play-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0; cursor: pointer;
+    transition: transform .2s;
+  }
+  .play-btn:hover { transform: scale(1.1); }
+  .progress-bar { flex: 1; height: 4px; background: var(--surface2); border-radius: 2px; cursor: pointer; position: relative; }
+  .progress-fill { height: 100%; background: var(--accent); border-radius: 2px; transition: width .1s; }
+  .audio-time { font-size: 12px; color: var(--text3); white-space: nowrap; }
+
+  /* VOTE BAR */
+  .vote-bar { background: var(--bg2); border-radius: 20px; overflow: hidden; height: 8px; }
+  .vote-bar-fill {
+    height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2));
+    border-radius: 20px; transition: width .5s;
+  }
+
+  /* LEADERBOARD */
+  .rank-item {
+    display: flex; align-items: center; gap: 16px;
+    padding: 14px 18px; border-radius: var(--radius);
+    background: var(--surface); border: 1px solid var(--border);
+    margin-bottom: 8px; transition: all .2s;
+  }
+  .rank-item:hover { border-color: var(--border2); transform: translateX(2px); }
+  .rank-num {
+    font-family: 'Bebas Neue', cursive; font-size: 22px;
+    width: 32px; text-align: center; flex-shrink: 0;
+  }
+  .rank-1 { color: var(--gold); }
+  .rank-2 { color: #c0c0c0; }
+  .rank-3 { color: #cd7f32; }
+
+  /* MODAL */
+  .modal-overlay {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,0.8); z-index: 1000;
+    align-items: center; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  .modal-overlay.active { display: flex; }
+  .modal {
+    background: var(--surface); border: 1px solid var(--border2);
+    border-radius: var(--radius-lg); padding: 28px;
+    width: 100%; max-width: 500px; max-height: 90vh; overflow-y: auto;
+    position: relative; animation: slideUp .3s ease;
+  }
+  @keyframes slideUp { from { transform: translateY(20px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .modal-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+  .modal-title { font-family: 'Bebas Neue', cursive; font-size: 24px; letter-spacing: 2px; }
+  .modal-close { background: var(--surface2); color: var(--text2); border-radius: 6px; padding: 6px 10px; font-size: 16px; cursor: pointer; }
+  .modal-close:hover { background: var(--bg2); color: var(--text); }
+
+  /* NOTIFICATION */
+  .notif {
+    position: fixed; top: 20px; right: 20px; z-index: 2000;
+    padding: 14px 20px; border-radius: 10px; font-size: 14px; font-weight: 500;
+    max-width: 320px; animation: slideIn .3s ease;
+    display: none; align-items: center; gap: 10px;
+  }
+  .notif.active { display: flex; }
+  .notif-success { background: rgba(46,204,113,0.95); color: white; }
+  .notif-error { background: rgba(255,60,60,0.95); color: white; }
+  .notif-info { background: rgba(74,158,255,0.95); color: white; }
+  @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+  /* STUDIO */
+  .studio-panel {
+    background: var(--bg2); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px;
+  }
+  .waveform {
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 8px; height: 80px; overflow: hidden;
+    position: relative; display: flex; align-items: flex-end;
+    gap: 2px; padding: 8px;
+  }
+  .wave-bar { flex: 1; background: var(--accent); border-radius: 2px; opacity: 0.7; }
+  .knob-container { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .knob {
+    width: 56px; height: 56px; border-radius: 50%;
+    background: var(--surface); border: 2px solid var(--border2);
+    position: relative; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .knob-indicator {
+    position: absolute; top: 6px; left: 50%; transform: translateX(-50%);
+    width: 3px; height: 10px; background: var(--accent); border-radius: 2px;
+  }
+  .knob-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
+
+  /* SLIDER */
+  .slider-row { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
+  .slider-label { font-size: 12px; color: var(--text3); width: 60px; text-transform: uppercase; letter-spacing: .5px; }
+  input[type=range] {
+    flex: 1; -webkit-appearance: none; height: 4px;
+    background: var(--surface2); border-radius: 2px; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    border-radius: 50%; background: var(--accent);
+  }
+  .slider-val { font-size: 12px; color: var(--text2); width: 36px; text-align: right; }
+
+  /* AUTH */
+  .auth-screen {
+    min-height: 100vh; display: flex; align-items: center; justify-content: center;
+    background: radial-gradient(ellipse at center, #1a0a0a 0%, var(--bg) 70%);
+  }
+  .auth-box {
+    width: 420px; background: var(--surface);
+    border: 1px solid var(--border2); border-radius: var(--radius-lg);
+    padding: 40px; animation: slideUp .4s ease;
+  }
+  .auth-logo { text-align: center; margin-bottom: 32px; }
+  .auth-logo .logo-text { font-size: 48px; }
+
+  /* CHART PLACEHOLDER */
+  .chart-area {
+    background: var(--bg); border-radius: 8px;
+    height: 160px; display: flex; align-items: flex-end;
+    gap: 8px; padding: 16px; overflow: hidden;
+  }
+  .chart-bar { flex: 1; background: linear-gradient(to top, var(--accent), var(--accent2)); border-radius: 4px 4px 0 0; opacity: 0.8; }
+
+  /* TOGGABLE */
+  .collapse { display: none; }
+  .collapse.open { display: block; }
+
+  /* INSTRU CARD */
+  .instru-card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 14px 16px;
+    display: flex; align-items: center; gap: 14px; transition: all .2s;
+  }
+  .instru-card:hover { border-color: var(--border2); }
+  .instru-thumb {
+    width: 48px; height: 48px; border-radius: 8px;
+    background: linear-gradient(135deg, var(--accent), var(--purple));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; flex-shrink: 0;
+  }
+
+  /* TABLE */
+  .data-table { width: 100%; border-collapse: collapse; }
+  .data-table th, .data-table td { padding: 12px 16px; text-align: left; border-bottom: 1px solid var(--border); }
+  .data-table th { font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--text3); font-weight: 600; }
+  .data-table td { font-size: 14px; color: var(--text); }
+  .data-table tr:hover td { background: rgba(255,255,255,0.03); }
+
+  /* CITY MAP VISUAL */
+  .city-zone {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius-lg); padding: 20px;
+    cursor: pointer; transition: all .2s; text-align: center;
+  }
+  .city-zone:hover { border-color: var(--accent); background: rgba(255,60,60,0.05); }
+  .city-zone.selected { border-color: var(--accent); background: rgba(255,60,60,0.1); }
+  .city-icon { font-size: 32px; margin-bottom: 8px; }
+  .city-name { font-family: 'Barlow Condensed', sans-serif; font-size: 16px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+  .city-count { font-size: 12px; color: var(--text3); margin-top: 4px; }
+
+  /* PROGRESS */
+  .progress { background: var(--surface2); border-radius: 4px; height: 6px; overflow: hidden; }
+  .progress-bar-inner { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 4px; }
+
+  /* HAMBURGER */
+  .hamburger { display: none; flex-direction: column; gap: 5px; cursor: pointer; padding: 8px; }
+  .hamburger span { display: block; width: 22px; height: 2px; background: var(--text); border-radius: 1px; }
+
+  /* RECORD BTN */
+  .record-btn {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: var(--accent); color: white;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px; cursor: pointer; transition: all .2s;
+    border: 3px solid rgba(255,60,60,0.3);
+    animation: none;
+  }
+  .record-btn:hover { transform: scale(1.05); background: #ff5555; }
+  .record-btn.recording { animation: pulse 1s infinite; background: #cc0000; border-color: rgba(200,0,0,0.5); }
+  @keyframes pulse { 0%,100% { box-shadow: 0 0 0 0 rgba(255,60,60,0.4); } 50% { box-shadow: 0 0 0 16px rgba(255,60,60,0); } }
+
+  @media (max-width: 900px) {
+    .sidebar { transform: translateX(-100%); }
+    .sidebar.open { transform: translateX(0); }
+    .main-content { margin-left: 0; }
+    .hamburger { display: flex; }
+    .grid-3, .grid-4 { grid-template-columns: 1fr 1fr; }
+    .grid-2 { grid-template-columns: 1fr; }
+    .page-content { padding: 16px; }
+  }
+  @media (max-width: 600px) {
+    .grid-3, .grid-4, .grid-2 { grid-template-columns: 1fr; }
+  }
+
+  /* DIVIDER */
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
+  .section-title {
+    font-family: 'Bebas Neue', cursive; font-size: 20px; letter-spacing: 2px;
+    color: var(--text); margin-bottom: 16px;
+  }
+  .text-accent { color: var(--accent); }
+  .text-muted { color: var(--text3); font-size: 13px; }
+  .text-sm { font-size: 13px; }
+  .text-xs { font-size: 11px; }
+  .flex { display: flex; }
+  .flex-center { display: flex; align-items: center; }
+  .flex-between { display: flex; align-items: center; justify-content: space-between; }
+  .gap-4 { gap: 4px; }
+  .gap-8 { gap: 8px; }
+  .gap-12 { gap: 12px; }
+  .gap-16 { gap: 16px; }
+  .mb-4 { margin-bottom: 4px; }
+  .mb-8 { margin-bottom: 8px; }
+  .mb-12 { margin-bottom: 12px; }
+  .mb-16 { margin-bottom: 16px; }
+  .mb-24 { margin-bottom: 24px; }
+  .mt-8 { margin-top: 8px; }
+  .mt-16 { margin-top: 16px; }
+  .mt-24 { margin-top: 24px; }
+  .w-full { width: 100%; }
+  .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .overlay-bg { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 90; display: none; }
+  .overlay-bg.active { display: block; }
+</style>
+</head>
+<body>
+
+<!-- NOTIFICATION -->
+<div class="notif" id="notif">
+  <span id="notif-icon">✓</span>
+  <span id="notif-text"></span>
+</div>
+
+<!-- MOBILE OVERLAY -->
+<div class="overlay-bg" id="mobileOverlay" onclick="closeSidebar()"></div>
+
+<!-- AUTH SCREEN -->
+<div id="authScreen" class="auth-screen">
+  <div class="auth-box">
+    <div class="auth-logo">
+      <div class="logo-text">GOMDE</div>
+      <div class="logo-sub">Battle Rap Platform</div>
+    </div>
+    <div class="tabs" id="authTabs">
+      <div class="tab active" onclick="switchAuthTab('login')">Connexion</div>
+      <div class="tab" onclick="switchAuthTab('signup')">Inscription</div>
+    </div>
+
+    <!-- LOGIN -->
+    <div id="loginForm">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" id="loginEmail" placeholder="ton@email.com" value="artiste@gomde.fr">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mot de passe</label>
+        <input type="password" class="form-control" id="loginPassword" placeholder="••••••••" value="password">
+      </div>
+      <div class="mb-16" style="font-size:12px;color:var(--text3)">
+        Accès rapide: <span style="color:var(--accent);cursor:pointer" onclick="quickLogin('artist')">Artiste</span> · 
+        <span style="color:var(--blue);cursor:pointer" onclick="quickLogin('admin')">Admin</span> · 
+        <span style="color:var(--green);cursor:pointer" onclick="quickLogin('user')">User</span>
+      </div>
+      <button class="btn btn-primary w-full btn-lg" onclick="doLogin()">SE CONNECTER</button>
+    </div>
+
+    <!-- SIGNUP -->
+    <div id="signupForm" class="collapse">
+      <div class="grid grid-2 mb-4" style="gap:12px">
+        <div class="form-group">
+          <label class="form-label">Pseudo</label>
+          <input type="text" class="form-control" id="signupPseudo" placeholder="TonPseudo">
+        </div>
+        <div class="form-group">
+          <label class="form-label">Rôle</label>
+          <select class="form-control" id="signupRole">
+            <option value="user">Fan</option>
+            <option value="artist">Artiste</option>
+          </select>
+        </div>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Ville</label>
+        <input type="text" class="form-control" id="signupCity" placeholder="Paris">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input type="email" class="form-control" id="signupEmail" placeholder="ton@email.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Mot de passe</label>
+        <input type="password" class="form-control" id="signupPassword" placeholder="••••••••">
+      </div>
+      <button class="btn btn-primary w-full btn-lg" onclick="doSignup()">CRÉER MON COMPTE</button>
+    </div>
+  </div>
+</div>
+
+<!-- MAIN APP -->
+<div id="mainApp" style="display:none">
+  <div id="app">
+    <!-- SIDEBAR -->
+    <nav class="sidebar" id="sidebar">
+      <div class="sidebar-logo">
+        <div class="logo-text">GOMDE</div>
+        <div class="logo-sub">Battle Rap Platform</div>
+      </div>
+      <div class="sidebar-nav">
+        <div class="nav-section">Menu</div>
+        <div class="nav-item active" onclick="navigate('home')" id="nav-home">
+          <span class="nav-icon">🏠</span> Dashboard
+        </div>
+        <div class="nav-item" onclick="navigate('battles')" id="nav-battles">
+          <span class="nav-icon">⚔️</span> Battles
+        </div>
+        <div class="nav-item" onclick="navigate('leaderboard')" id="nav-leaderboard">
+          <span class="nav-icon">🏆</span> Classement
+        </div>
+        <div class="nav-item" onclick="navigate('map')" id="nav-map">
+          <span class="nav-icon">🏙️</span> Quartier / Ville
+        </div>
+        <div class="nav-section">Créer</div>
+        <div class="nav-item" onclick="navigate('studio')" id="nav-studio">
+          <span class="nav-icon">🎙️</span> Studio Audio
+        </div>
+        <div class="nav-item" onclick="navigate('instrus')" id="nav-instrus">
+          <span class="nav-icon">🎵</span> Instrus
+        </div>
+        <div class="nav-section">Profil</div>
+        <div class="nav-item" onclick="navigate('profile')" id="nav-profile">
+          <span class="nav-icon">👤</span> Mon Profil
+        </div>
+        <div class="nav-item" onclick="navigate('artists')" id="nav-artists">
+          <span class="nav-icon">🎤</span> Artistes
+        </div>
+        <div class="nav-item admin-only" onclick="navigate('admin')" id="nav-admin" style="display:none">
+          <span class="nav-icon">🛡️</span> Administration
+        </div>
+      </div>
+      <div class="sidebar-footer">
+        <div class="user-mini" onclick="navigate('profile')">
+          <div class="avatar" id="sidebarAvatar">?</div>
+          <div style="flex:1;min-width:0">
+            <div style="font-weight:600;font-size:13px" id="sidebarName">...</div>
+            <div style="font-size:11px;color:var(--text3)" id="sidebarRole">...</div>
+          </div>
+          <button class="btn btn-ghost btn-sm" onclick="event.stopPropagation();doLogout()" title="Déconnexion">↩</button>
+        </div>
+      </div>
+    </nav>
+
+    <!-- MAIN -->
+    <main class="main-content">
+      <div class="topbar">
+        <div style="display:flex;align-items:center;gap:14px">
+          <div class="hamburger" onclick="toggleSidebar()">
+            <span></span><span></span><span></span>
+          </div>
+          <span class="page-title" id="pageTitle">Dashboard</span>
+        </div>
+        <div class="topbar-actions">
+          <button class="btn btn-primary btn-sm" onclick="openModal('battleModal')">⚔️ Créer Battle</button>
+          <button class="btn btn-ghost btn-sm btn-icon" onclick="showNotif('Pas de nouvelles notifications','info')">🔔</button>
+        </div>
+      </div>
+
+      <!-- PAGES -->
+      <div id="pageDashboard" class="page-content"></div>
+      <div id="pageBattles" class="page-content" style="display:none"></div>
+      <div id="pageLeaderboard" class="page-content" style="display:none"></div>
+      <div id="pageMap" class="page-content" style="display:none"></div>
+      <div id="pageStudio" class="page-content" style="display:none"></div>
+      <div id="pageInstrus" class="page-content" style="display:none"></div>
+      <div id="pageProfile" class="page-content" style="display:none"></div>
+      <div id="pageArtists" class="page-content" style="display:none"></div>
+      <div id="pageAdmin" class="page-content" style="display:none"></div>
+    </main>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="battleModal">
+  <div class="modal" style="max-width:520px">
+    <div class="modal-header">
+      <span class="modal-title">⚔️ CRÉER UN BATTLE</span>
+      <button class="modal-close" onclick="closeModal('battleModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Titre du battle</label>
+      <input type="text" class="form-control" id="battleTitle" placeholder="Battle du Siècle...">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Adversaire</label>
+      <select class="form-control" id="battleOpponent">
+        <option value="">Choisir un artiste...</option>
+      </select>
+    </div>
+    <div class="grid grid-2 mb-4" style="gap:12px">
+      <div class="form-group">
+        <label class="form-label">Type</label>
+        <select class="form-control" id="battleType">
+          <option value="audio">Audio</option>
+          <option value="video">Vidéo</option>
+          <option value="texte">Texte</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Durée</label>
+        <select class="form-control" id="battleDuration">
+          <option value="48h">48 heures</option>
+          <option value="7j">7 jours</option>
+          <option value="30j">30 jours</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Règles</label>
+      <textarea class="form-control" id="battleRules" placeholder="Décris les règles du battle...">Chaque artiste a 48h pour poster son contenu. Les votes de la communauté déterminent le gagnant.</textarea>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal('battleModal')" style="flex:1">Annuler</button>
+      <button class="btn btn-primary" onclick="createBattle()" style="flex:2">⚔️ LANCER LE BATTLE</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="voteModal">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header">
+      <span class="modal-title">🗳️ VOTER</span>
+      <button class="modal-close" onclick="closeModal('voteModal')">✕</button>
+    </div>
+    <div id="voteModalContent"></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="profileEditModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">✏️ MODIFIER MON PROFIL</span>
+      <button class="modal-close" onclick="closeModal('profileEditModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Bio</label>
+      <textarea class="form-control" id="editBio" rows="3"></textarea>
+    </div>
+    <div class="grid grid-2" style="gap:12px">
+      <div class="form-group">
+        <label class="form-label">Ville</label>
+        <input type="text" class="form-control" id="editCity">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Quartier</label>
+        <input type="text" class="form-control" id="editNeighborhood">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Style</label>
+      <select class="form-control" id="editStyle">
+        <option value="Trap">Trap</option>
+        <option value="Drill">Drill</option>
+        <option value="Boom Bap">Boom Bap</option>
+        <option value="Afro">Afro</option>
+        <option value="Freestyle">Freestyle</option>
+      </select>
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal('profileEditModal')" style="flex:1">Annuler</button>
+      <button class="btn btn-primary" onclick="saveProfile()" style="flex:2">💾 SAUVEGARDER</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="uploadModal">
+  <div class="modal">
+    <div class="modal-header">
+      <span class="modal-title">⬆️ UPLOAD INSTRU</span>
+      <button class="modal-close" onclick="closeModal('uploadModal')">✕</button>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Nom</label>
+      <input type="text" class="form-control" id="uploadName" placeholder="Nom de l'instru...">
+    </div>
+    <div class="grid grid-2" style="gap:12px">
+      <div class="form-group">
+        <label class="form-label">Style</label>
+        <select class="form-control" id="uploadStyle">
+          <option value="Trap">Trap</option>
+          <option value="Drill">Drill</option>
+          <option value="Afro">Afro</option>
+          <option value="Boom Bap">Boom Bap</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label class="form-label">BPM</label>
+        <input type="number" class="form-control" id="uploadBpm" placeholder="140" min="60" max="200">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Fichier Audio</label>
+      <input type="file" class="form-control" id="uploadFile" accept="audio/*">
+    </div>
+    <div style="display:flex;gap:12px;margin-top:8px">
+      <button class="btn btn-ghost" onclick="closeModal('uploadModal')" style="flex:1">Annuler</button>
+      <button class="btn btn-primary" onclick="uploadInstru()" style="flex:2">⬆️ UPLOADER</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================
+// DATA STORE
+// ================================
+const DB = {
+  users: [
+    { id:1, pseudo:'BigLyrics_Paris', email:'artiste@gomde.fr', password:'password', role:'artist', city:'Paris', neighborhood:'93', bio:'Flow inarrêtable, bars en acier. Né dans la rue, forgé dans le studio.', avatar:'BL', wins:14, losses:3, score:1247, style:'Trap', battles_count:17, followers:892 },
+    { id:2, pseudo:'AdminGomde', email:'admin@gomde.fr', password:'admin', role:'admin', city:'Lyon', neighborhood:'Guillotière', bio:'Administrateur de la plateforme GOMDE.', avatar:'AG', wins:0, losses:0, score:0, style:'—', battles_count:0, followers:0 },
+    { id:3, pseudo:'FanRap', email:'user@gomde.fr', password:'user', role:'user', city:'Marseille', neighborhood:'13ème', bio:'Fan de rap, je vote pour les meilleurs.', avatar:'FR', wins:0, losses:0, score:0, style:'—', battles_count:0, followers:145 },
+    { id:4, pseudo:'MarseilleBoss', email:'boss@gomde.fr', password:'password', role:'artist', city:'Marseille', neighborhood:'13ème', bio:"13 dans le sang. Chaque bar est une lettre à la rue.", avatar:'MB', wins:11, losses:5, score:987, style:'Drill', battles_count:16, followers:654 },
+    { id:5, pseudo:'LyonKing', email:'lyon@gomde.fr', password:'password', role:'artist', city:'Lyon', neighborhood:'Guillotière', bio:"Lyon c'est pas que la traboule, c'est aussi le flex.", avatar:'LK', wins:9, losses:7, score:812, style:'Boom Bap', battles_count:16, followers:421 },
+    { id:6, pseudo:'NordRider', email:'nord@gomde.fr', password:'password', role:'artist', city:'Lille', neighborhood:'Wazemmes', bio:"Nord jusqu'à la mort.", avatar:'NR', wins:7, losses:4, score:743, style:'Trap', battles_count:11, followers:387 },
+    { id:7, pseudo:'BordoFlow', email:'bdo@gomde.fr', password:'password', role:'artist', city:'Bordeaux', neighborhood:'Bacalan', bio:"Du vin et des bars, Bordeaux sort du silence.", avatar:'BF', wins:6, losses:6, score:601, style:'Afro', battles_count:12, followers:298 },
+    { id:8, pseudo:'StreetVoice', email:'sv@gomde.fr', password:'password', role:'artist', city:'Paris', neighborhood:'18ème', bio:"La rue m'a tout appris.", avatar:'SV', wins:8, losses:4, score:734, style:'Freestyle', battles_count:12, followers:512 },
+  ],
+  battles: [
+    { id:1, title:"Paris vs Marseille", challenger_id:1, opponent_id:4, status:'active', type:'audio', votes_a:234, votes_b:198, created:'2024-01-15', city:'Paris', neighborhood:'93', rules:'Chaque artiste a 48h pour poster son contenu.' },
+    { id:2, title:"Nord vs Bordeaux", challenger_id:6, opponent_id:7, status:'active', type:'video', votes_a:156, votes_b:178, created:'2024-01-14', city:'Lille', neighborhood:'Wazemmes', rules:'Format 3 minutes max.' },
+    { id:3, title:"Flow Championship", challenger_id:5, opponent_id:8, status:'completed', winner_id:5, type:'audio', votes_a:412, votes_b:287, created:'2024-01-10', city:'Lyon', neighborhood:'Guillotière', rules:'Battle texte + audio obligatoire.' },
+    { id:4, title:"18ème vs 13ème", challenger_id:8, opponent_id:4, status:'pending', type:'audio', votes_a:0, votes_b:0, created:'2024-01-16', city:'Paris', neighborhood:'18ème', rules:'Standard.' },
+    { id:5, title:"Trap Royale", challenger_id:1, opponent_id:6, status:'active', type:'video', votes_a:89, votes_b:102, created:'2024-01-13', city:'Paris', neighborhood:'93', rules:'Trap uniquement.' },
+    { id:6, title:"Boom Bap Classic", challenger_id:5, opponent_id:8, status:'active', type:'audio', votes_a:67, votes_b:71, created:'2024-01-12', city:'Lyon', neighborhood:'Guillotière', rules:'Old school style.' },
+  ],
+  instrus: [
+    { id:1, name:'Dark Nights', style:'Drill', bpm:140, duration:'3:24', artist:'Producer_X', downloads:423, plays:1892 },
+    { id:2, name:'African Sunset', style:'Afro', bpm:95, duration:'4:12', artist:'AfroBeats_FR', downloads:318, plays:1456 },
+    { id:3, name:'Street Level', style:'Trap', bpm:145, duration:'3:08', artist:'TrapMaker', downloads:567, plays:2341 },
+    { id:4, name:'Classic Vibes', style:'Boom Bap', bpm:88, duration:'4:45', artist:'BoomBap_Lord', downloads:234, plays:987 },
+    { id:5, name:'Grind Time', style:'Trap', bpm:138, duration:'3:52', artist:'Producer_X', downloads:891, plays:3102 },
+    { id:6, name:'Night Drill', style:'Drill', bpm:142, duration:'3:15', artist:'DrillMaster', downloads:445, plays:1789 },
+    { id:7, name:'Roots & Bars', style:'Afro', bpm:102, duration:'4:30', artist:'AfroBeats_FR', downloads:289, plays:1123 },
+    { id:8, name:'Underground', style:'Boom Bap', bpm:85, duration:'5:10', artist:'BoomBap_Lord', downloads:176, plays:743 },
+  ]
+};
+
+// ================================
+// STATE
+// ================================
+let currentUser = null;
+let currentPage = 'home';
+let isRecording = false;
+let recordingInterval = null;
+let recordingTime = 0;
+let selectedInstru = null;
+let studioPlaying = false;
+
+// ================================
+// AUTH
+// ================================
+function switchAuthTab(tab) {
+  document.querySelectorAll('#authTabs .tab').forEach((t,i) => {
+    t.classList.toggle('active', (tab==='login' && i===0)||(tab==='signup' && i===1));
+  });
+  document.getElementById('loginForm').classList.toggle('collapse', tab!=='login');
+  document.getElementById('signupForm').classList.toggle('collapse', tab!=='signup');
+}
+
+function quickLogin(role) {
+  const map = { artist: {e:'artiste@gomde.fr',p:'password'}, admin: {e:'admin@gomde.fr',p:'admin'}, user: {e:'user@gomde.fr',p:'user'} };
+  document.getElementById('loginEmail').value = map[role].e;
+  document.getElementById('loginPassword').value = map[role].p;
+}
+
+function doLogin() {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const user = DB.users.find(u => u.email===email && u.password===password);
+  if (!user) { showNotif('Email ou mot de passe incorrect','error'); return; }
+  login(user);
+}
+
+function doSignup() {
+  const pseudo = document.getElementById('signupPseudo').value.trim();
+  const email = document.getElementById('signupEmail').value.trim();
+  const password = document.getElementById('signupPassword').value;
+  const city = document.getElementById('signupCity').value.trim();
+  const role = document.getElementById('signupRole').value;
+  if (!pseudo||!email||!password||!city) { showNotif('Tous les champs sont requis','error'); return; }
+  if (DB.users.find(u=>u.email===email)) { showNotif('Email déjà utilisé','error'); return; }
+  const newUser = {
+    id: DB.users.length+1, pseudo, email, password, role, city,
+    neighborhood: '', bio: '', avatar: pseudo.substring(0,2).toUpperCase(),
+    wins:0, losses:0, score:0, style:'Freestyle', battles_count:0, followers:0
+  };
+  DB.users.push(newUser);
+  login(newUser);
+}
+
+function login(user) {
+  currentUser = user;
+  localStorage.setItem('gomde_token', JSON.stringify({id:user.id,ts:Date.now()}));
+  document.getElementById('authScreen').style.display = 'none';
+  document.getElementById('mainApp').style.display = 'block';
+  document.getElementById('sidebarAvatar').textContent = user.avatar;
+  document.getElementById('sidebarName').textContent = user.pseudo;
+  document.getElementById('sidebarRole').textContent = user.role==='admin'?'Administrateur':user.role==='artist'?'Artiste':'Fan';
+  if (user.role==='admin') document.getElementById('nav-admin').style.display='flex';
+  populateBattleOpponents();
+  navigate('home');
+  showNotif(`Bienvenue ${user.pseudo} !`, 'success');
+}
+
+function doLogout() {
+  currentUser = null;
+  localStorage.removeItem('gomde_token');
+  document.getElementById('mainApp').style.display = 'none';
+  document.getElementById('authScreen').style.display = 'flex';
+  if (isRecording) stopRecording();
+}
+
+// ================================
+// NAVIGATION
+// ================================
+const pageMap = {
+  home: { el:'pageDashboard', title:'Dashboard', builder: buildDashboard },
+  battles: { el:'pageBattles', title:'Battles', builder: buildBattles },
+  leaderboard: { el:'pageLeaderboard', title:'Classement', builder: buildLeaderboard },
+  map: { el:'pageMap', title:'Quartier / Ville', builder: buildMap },
+  studio: { el:'pageStudio', title:'Studio Audio', builder: buildStudio },
+  instrus: { el:'pageInstrus', title:'Instrus', builder: buildInstrus },
+  profile: { el:'pageProfile', title:'Mon Profil', builder: buildProfile },
+  artists: { el:'pageArtists', title:'Artistes', builder: buildArtists },
+  admin: { el:'pageAdmin', title:'Administration', builder: buildAdmin },
+};
+
+function navigate(page) {
+  if (page==='admin' && currentUser?.role!=='admin') { showNotif('Accès refusé','error'); return; }
+  currentPage = page;
+  Object.values(pageMap).forEach(p => document.getElementById(p.el).style.display='none');
+  const p = pageMap[page];
+  if (!p) return;
+  document.getElementById(p.el).style.display='block';
+  document.getElementById('pageTitle').textContent = p.title;
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.remove('active'));
+  const navEl = document.getElementById(`nav-${page==='home'?'home':page}`);
+  if(navEl) navEl.classList.add('active');
+  p.builder();
+  closeSidebar();
+  window.scrollTo(0,0);
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+  document.getElementById('mobileOverlay').classList.toggle('active');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+  document.getElementById('mobileOverlay').classList.remove('active');
+}
+
+// ================================
+// UTILS
+// ================================
+function getUser(id) { return DB.users.find(u=>u.id===id); }
+function getBattle(id) { return DB.battles.find(b=>b.id===id); }
+function openModal(id) { document.getElementById(id).classList.add('active'); }
+function closeModal(id) { document.getElementById(id).classList.remove('active'); }
+function showNotif(msg, type='success') {
+  const n = document.getElementById('notif');
+  const icons = {success:'✓', error:'✕', info:'ℹ'};
+  n.className = `notif active notif-${type}`;
+  document.getElementById('notif-icon').textContent = icons[type]||'✓';
+  document.getElementById('notif-text').textContent = msg;
+  setTimeout(()=>n.classList.remove('active'), 3500);
+}
+function statusBadge(status) {
+  const map = {active:'badge-green', pending:'badge-gold', completed:'badge-gray'};
+  const label = {active:'En cours', pending:'En attente', completed:'Terminé'};
+  return `<span class="badge ${map[status]||'badge-gray'}">${label[status]||status}</span>`;
+}
+function typeBadge(type) {
+  const map = {audio:'badge-blue', video:'badge-purple', texte:'badge-gray'};
+  return `<span class="badge ${map[type]||'badge-gray'}">🎵 ${type}</span>`;
+}
+function waveformHtml(n=20) {
+  const bars = Array.from({length:n},()=>`<div class="wave-bar" style="height:${15+Math.random()*60}%"></div>`).join('');
+  return `<div class="waveform">${bars}</div>`;
+}
+function populateBattleOpponents() {
+  const sel = document.getElementById('battleOpponent');
+  sel.innerHTML = '<option value="">Choisir un artiste...</option>';
+  DB.users.filter(u=>u.id!==currentUser?.id && u.role==='artist').forEach(u=>{
+    sel.innerHTML += `<option value="${u.id}">${u.pseudo} — ${u.city}</option>`;
+  });
+}
+function totalVotes(b) { return b.votes_a + b.votes_b; }
+function votePercA(b) { const t=totalVotes(b); return t?Math.round(b.votes_a/t*100):50; }
+function votePercB(b) { const t=totalVotes(b); return t?Math.round(b.votes_b/t*100):50; }
+
+// ================================
+// DASHBOARD
+// ================================
+function buildDashboard() {
+  const u = currentUser;
+  const myBattles = DB.battles.filter(b=>b.challenger_id===u.id||b.opponent_id===u.id);
+  const activeBattles = DB.battles.filter(b=>b.status==='active');
+  const topUser = [...DB.users].sort((a,b)=>b.score-a.score)[0];
+
+  const chartBars = [40,65,55,80,45,90,72].map((h,i)=>
+    `<div class="chart-bar" style="height:${h}%;opacity:${0.5+i*0.07}"></div>`).join('');
+
+  document.getElementById('pageDashboard').innerHTML = `
+    <div class="grid grid-4 mb-24" style="gap:16px">
+      <div class="stat-card">
+        <div class="stat-label">Score Total</div>
+        <div class="stat-value text-accent">${u.score}</div>
+        <div class="stat-sub">+47 cette semaine</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Battles Gagnés</div>
+        <div class="stat-value" style="color:var(--green)">${u.wins}</div>
+        <div class="stat-sub">${u.battles_count} battles total</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Defeats</div>
+        <div class="stat-value" style="color:var(--text2)">${u.losses}</div>
+        <div class="stat-sub">Win rate: ${u.battles_count?Math.round(u.wins/u.battles_count*100):0}%</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Followers</div>
+        <div class="stat-value" style="color:var(--blue)">${u.followers}</div>
+        <div class="stat-sub">+12 ce mois</div>
+      </div>
+    </div>
+
+    <div class="grid" style="grid-template-columns:2fr 1fr;gap:20px">
+      <div>
+        <div class="card mb-24">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Activité — 7 derniers jours</div>
+              <div class="card-subtitle">Votes reçus sur tes battles</div>
+            </div>
+            <span class="badge badge-green">+23%</span>
+          </div>
+          <div class="chart-area">${chartBars}</div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px">
+            ${['Lun','Mar','Mer','Jeu','Ven','Sam','Dim'].map(d=>`<span style="font-size:11px;color:var(--text3)">${d}</span>`).join('')}
+          </div>
+        </div>
+
+        <div class="section-title">⚔️ MES BATTLES RÉCENTS</div>
+        ${myBattles.length===0 ? '<div class="card" style="text-align:center;color:var(--text3)">Aucun battle encore. Lance-toi !</div>' : ''}
+        ${myBattles.slice(0,3).map(b=>{
+          const opp = getUser(b.challenger_id===u.id ? b.opponent_id : b.challenger_id);
+          const isChallenger = b.challenger_id===u.id;
+          const myVotes = isChallenger ? b.votes_a : b.votes_b;
+          const oppVotes = isChallenger ? b.votes_b : b.votes_a;
+          return `
+          <div class="battle-card mb-12" onclick="navigate('battles')">
+            <div class="battle-header">
+              <div class="flex-between">
+                <span style="font-weight:700;font-size:14px">${b.title}</span>
+                <div style="display:flex;gap:8px;align-items:center">${statusBadge(b.status)}${typeBadge(b.type)}</div>
+              </div>
+            </div>
+            <div style="padding:14px 20px">
+              <div class="flex-between mb-8">
+                <span style="font-size:13px"><span style="color:var(--accent)">Toi</span> vs <strong>${opp?.pseudo}</strong></span>
+                <span style="font-size:13px;color:var(--text2)">${myVotes} — ${oppVotes} votes</span>
+              </div>
+              <div class="vote-bar"><div class="vote-bar-fill" style="width:${votePercA(b)}%"></div></div>
+              <div style="display:flex;justify-content:space-between;margin-top:4px;font-size:11px;color:var(--text3)">
+                <span>Toi ${votePercA(b)}%</span><span>${opp?.pseudo} ${votePercB(b)}%</span>
+              </div>
+            </div>
+          </div>`;
+        }).join('')}
+        ${u.role!=='admin' && u.role!=='user' ? `<button class="btn btn-primary w-full" onclick="openModal('battleModal')">⚔️ Créer un nouveau battle</button>` : ''}
+      </div>
+
+      <div>
+        <div class="card mb-20">
+          <div class="card-header">
+            <div class="card-title">🏆 #1 Mondial</div>
+          </div>
+          <div style="text-align:center;padding:8px 0">
+            <div class="avatar xl" style="margin:0 auto 12px;background:linear-gradient(135deg,var(--gold),var(--accent2))">${topUser.avatar}</div>
+            <div style="font-weight:700;font-size:16px">${topUser.pseudo}</div>
+            <div style="color:var(--text3);font-size:13px">${topUser.city}</div>
+            <div style="font-family:'Bebas Neue';font-size:32px;color:var(--gold);margin:8px 0">${topUser.score}</div>
+            <div style="font-size:12px;color:var(--text3)">Score total</div>
+            <div style="display:flex;justify-content:center;gap:20px;margin-top:12px">
+              <div style="text-align:center"><div style="font-weight:700;color:var(--green)">${topUser.wins}</div><div style="font-size:11px;color:var(--text3)">victoires</div></div>
+              <div style="text-align:center"><div style="font-weight:700;color:var(--text2)">${topUser.losses}</div><div style="font-size:11px;color:var(--text3)">défaites</div></div>
+            </div>
+          </div>
+          <button class="btn btn-gold w-full mt-16" onclick="navigate('leaderboard')">Voir tout le classement</button>
+        </div>
+
+        <div class="card mb-20">
+          <div class="card-title mb-16">🔥 Battles chauds</div>
+          ${activeBattles.slice(0,3).map(b=>{
+            const cha = getUser(b.challenger_id);
+            const opp = getUser(b.opponent_id);
+            return `
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border);cursor:pointer" onclick="navigate('battles')">
+              <div>
+                <div style="font-size:13px;font-weight:600">${cha?.pseudo} vs ${opp?.pseudo}</div>
+                <div style="font-size:11px;color:var(--text3)">${totalVotes(b)} votes</div>
+              </div>
+              <span class="badge badge-green">Live</span>
+            </div>`;
+          }).join('')}
+          <button class="btn btn-secondary w-full mt-16" onclick="navigate('battles')">Voir tous les battles</button>
+        </div>
+
+        <div class="card">
+          <div class="card-title mb-16">🎵 Actions rapides</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-secondary w-full" onclick="navigate('studio')">🎙️ Ouvrir le Studio</button>
+            <button class="btn btn-secondary w-full" onclick="navigate('instrus')">🎵 Chercher une instru</button>
+            <button class="btn btn-secondary w-full" onclick="navigate('leaderboard')">🏆 Mon classement</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+// ================================
+// BATTLES
+// ================================
+let battlesFilter = 'all';
+let battlesSort = 'recent';
+
+function buildBattles() {
+  document.getElementById('pageBattles').innerHTML = `
+    <div class="flex-between mb-24" style="flex-wrap:wrap;gap:12px">
+      <div class="tabs" style="flex:1;min-width:250px;max-width:400px;margin:0">
+        <div class="tab ${battlesFilter==='all'?'active':''}" onclick="filterBattles('all')">Tous</div>
+        <div class="tab ${battlesFilter==='active'?'active':''}" onclick="filterBattles('active')">En cours</div>
+        <div class="tab ${battlesFilter==='pending'?'active':''}" onclick="filterBattles('pending')">En attente</div>
+        <div class="tab ${battlesFilter==='completed'?'active':''}" onclick="filterBattles('completed')">Terminés</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <select class="form-control" style="width:auto;padding:8px 12px" onchange="sortBattles(this.value)">
+          <option value="recent">Plus récents</option>
+          <option value="votes">Plus votés</option>
+          <option value="active">Actifs</option>
+        </select>
+        <button class="btn btn-primary" onclick="openModal('battleModal')">⚔️ Créer</button>
+      </div>
+    </div>
+    <div id="battlesList"></div>
+  `;
+  renderBattlesList();
+}
+
+function filterBattles(f) {
+  battlesFilter = f;
+  document.querySelectorAll('#pageBattles .tab').forEach((t,i)=>{
+    t.classList.toggle('active',['all','active','pending','completed'][i]===f);
+    t.setAttribute('onclick',`filterBattles('${['all','active','pending','completed'][i]}')`);
+  });
+  renderBattlesList();
+}
+
+function sortBattles(s) { battlesSort = s; renderBattlesList(); }
+
+function renderBattlesList() {
+  let battles = [...DB.battles];
+  if (battlesFilter!=='all') battles = battles.filter(b=>b.status===battlesFilter);
+  if (battlesSort==='votes') battles.sort((a,b)=>totalVotes(b)-totalVotes(a));
+  else if (battlesSort==='active') battles = battles.filter(b=>b.status==='active').concat(battles.filter(b=>b.status!=='active'));
+
+  const el = document.getElementById('battlesList');
+  if (!el) return;
+  if (battles.length===0) { el.innerHTML='<div class="card" style="text-align:center;color:var(--text3);padding:40px">Aucun battle trouvé.</div>'; return; }
+  el.innerHTML = battles.map(b=>battleCardHtml(b)).join('');
+}
+
+function battleCardHtml(b) {
+  const cha = getUser(b.challenger_id);
+  const opp = getUser(b.opponent_id);
+  const total = totalVotes(b);
+  const pA = votePercA(b), pB = votePercB(b);
+  const isCompleted = b.status==='completed';
+  const winner = isCompleted ? getUser(b.winner_id) : null;
+  return `
+  <div class="battle-card mb-16">
+    <div class="battle-header">
+      <div class="flex-between mb-12">
+        <span style="font-family:'Bebas Neue';font-size:18px;letter-spacing:2px">${b.title}</span>
+        <div style="display:flex;gap:8px">${statusBadge(b.status)}${typeBadge(b.type)}</div>
+      </div>
+      <div class="battle-vs">
+        <div class="battle-fighter">
+          <div class="avatar" style="margin:0 auto;${isCompleted&&winner?.id===b.challenger_id?'border:2px solid var(--gold)':''}">${cha?.avatar}</div>
+          <div class="fighter-name">${cha?.pseudo}${isCompleted&&winner?.id===b.challenger_id?' 🏆':''}</div>
+          <div class="fighter-city">${cha?.city}</div>
+        </div>
+        <div class="vs-badge">VS</div>
+        <div class="battle-fighter">
+          <div class="avatar" style="margin:0 auto;background:linear-gradient(135deg,var(--blue),var(--purple));${isCompleted&&winner?.id===b.opponent_id?'border:2px solid var(--gold)':''}">${opp?.avatar}</div>
+          <div class="fighter-name">${opp?.pseudo}${isCompleted&&winner?.id===b.opponent_id?' 🏆':''}</div>
+          <div class="fighter-city">${opp?.city}</div>
+        </div>
+      </div>
+    </div>
+
+    <div style="padding:16px 20px">
+      ${b.status!=='pending' ? `
+      <div class="mb-12">
+        ${waveformHtml(28)}
+        <div class="audio-player mt-8">
+          <div class="play-btn" onclick="togglePlay(this)">▶</div>
+          <div class="progress-bar" onclick="seekAudio(this,event)">
+            <div class="progress-fill" style="width:${Math.random()*60}%"></div>
+          </div>
+          <span class="audio-time">2:${Math.floor(10+Math.random()*50)}</span>
+        </div>
+      </div>` : '<div style="padding:12px;background:var(--bg2);border-radius:8px;text-align:center;color:var(--text3);font-size:13px">⏳ En attente de l\'adversaire...</div>'}
+
+      ${b.status!=='pending' ? `
+      <div>
+        <div class="flex-between mb-8">
+          <span style="font-size:13px;font-weight:600">${cha?.pseudo}</span>
+          <span style="font-size:13px;color:var(--text3)">${total} votes</span>
+          <span style="font-size:13px;font-weight:600">${opp?.pseudo}</span>
+        </div>
+        <div class="vote-bar mb-4"><div class="vote-bar-fill" style="width:${pA}%"></div></div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:var(--text3)">
+          <span>${b.votes_a} votes (${pA}%)</span><span>${b.votes_b} votes (${pB}%)</span>
+        </div>
+      </div>` : ''}
+
+      <div style="display:flex;gap:8px;margin-top:16px">
+        ${b.status==='active' ? `<button class="btn btn-primary" style="flex:1" onclick="openVoteModal(${b.id})">🗳️ Voter</button>` : ''}
+        ${b.status==='pending' && currentUser?.id===b.opponent_id ? `<button class="btn btn-green" style="flex:1" onclick="acceptBattle(${b.id})">✓ Accepter</button><button class="btn btn-ghost" style="flex:1" onclick="refuseBattle(${b.id})">✕ Refuser</button>` : ''}
+        ${isCompleted ? `<button class="btn btn-ghost" style="flex:1" disabled>✓ Battle terminé</button>` : ''}
+        <button class="btn btn-ghost btn-icon" onclick="showNotif('Battle partagé !','success')" title="Partager">🔗</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+function openVoteModal(battleId) {
+  const b = getBattle(battleId);
+  const cha = getUser(b.challenger_id);
+  const opp = getUser(b.opponent_id);
+  document.getElementById('voteModalContent').innerHTML = `
+    <p style="color:var(--text2);margin-bottom:20px">Choisis le meilleur artiste de ce battle :</p>
+    <div style="display:flex;gap:16px">
+      <div style="flex:1;background:var(--bg2);border:2px solid var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:all .2s" 
+           onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--border)'"
+           onclick="castVote(${battleId},'a')">
+        <div class="avatar" style="margin:0 auto 10px">${cha?.avatar}</div>
+        <div style="font-weight:700;margin-bottom:4px">${cha?.pseudo}</div>
+        <div style="font-size:12px;color:var(--text3)">${b.votes_a} votes</div>
+        <button class="btn btn-primary btn-sm mt-8 w-full">Voter ici</button>
+      </div>
+      <div style="display:flex;align-items:center;font-family:'Bebas Neue';font-size:24px;color:var(--accent)">VS</div>
+      <div style="flex:1;background:var(--bg2);border:2px solid var(--border);border-radius:12px;padding:20px;text-align:center;cursor:pointer;transition:all .2s"
+           onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--border)'"
+           onclick="castVote(${battleId},'b')">
+        <div class="avatar" style="margin:0 auto 10px;background:linear-gradient(135deg,var(--blue),var(--purple))">${opp?.avatar}</div>
+        <div style="font-weight:700;margin-bottom:4px">${opp?.pseudo}</div>
+        <div style="font-size:12px;color:var(--text3)">${b.votes_b} votes</div>
+        <button class="btn btn-secondary btn-sm mt-8 w-full">Voter ici</button>
+      </div>
+    </div>
+  `;
+  openModal('voteModal');
+}
+
+function castVote(battleId, side) {
+  const b = getBattle(battleId);
+  if (side==='a') b.votes_a++; else b.votes_b++;
+  closeModal('voteModal');
+  showNotif('Vote enregistré ! 🗳️', 'success');
+  buildBattles();
+}
+
+function acceptBattle(id) {
+  const b = getBattle(id); b.status='active';
+  showNotif('Battle accepté ! La guerre commence ⚔️','success');
+  buildBattles();
+}
+
+function refuseBattle(id) {
+  const idx = DB.battles.findIndex(b=>b.id===id);
+  if(idx>-1) DB.battles.splice(idx,1);
+  showNotif('Battle refusé.','info');
+  buildBattles();
+}
+
+function createBattle() {
+  const title = document.getElementById('battleTitle').value.trim();
+  const opp_id = parseInt(document.getElementById('battleOpponent').value);
+  const type = document.getElementById('battleType').value;
+  if (!title||!opp_id) { showNotif('Remplis tous les champs','error'); return; }
+  const b = {
+    id: DB.battles.length+1, title, challenger_id: currentUser.id, opponent_id: opp_id,
+    status:'pending', type, votes_a:0, votes_b:0,
+    created: new Date().toISOString().split('T')[0],
+    city: currentUser.city, neighborhood: currentUser.neighborhood,
+    rules: document.getElementById('battleRules').value
+  };
+  DB.battles.unshift(b);
+  closeModal('battleModal');
+  showNotif('Battle créé ! L\'adversaire doit accepter 🔥','success');
+  if(currentPage==='battles') buildBattles();
+  document.getElementById('battleTitle').value='';
+}
+
+function seekAudio(bar, e) {
+  const rect = bar.getBoundingClientRect();
+  const pct = ((e.clientX-rect.left)/rect.width)*100;
+  bar.querySelector('.progress-fill').style.width = Math.min(100,Math.max(0,pct))+'%';
+}
+
+function togglePlay(btn) {
+  if(btn.textContent==='▶') { btn.textContent='⏸'; btn.style.background='var(--green)'; }
+  else { btn.textContent='▶'; btn.style.background='var(--accent)'; }
+}
+
+// ================================
+// LEADERBOARD
+// ================================
+let lbFilter = 'global';
+
+function buildLeaderboard() {
+  document.getElementById('pageLeaderboard').innerHTML = `
+    <div class="tabs mb-24">
+      <div class="tab ${lbFilter==='global'?'active':''}" onclick="filterLb('global')">🌍 Global</div>
+      <div class="tab ${lbFilter==='city'?'active':''}" onclick="filterLb('city')">🏙️ Par Ville</div>
+      <div class="tab ${lbFilter==='wins'?'active':''}" onclick="filterLb('wins')">⚔️ Par Victoires</div>
+      <div class="tab ${lbFilter==='votes'?'active':''}" onclick="filterLb('votes')">🗳️ Par Votes</div>
+    </div>
+    <div class="grid" style="grid-template-columns:2fr 1fr;gap:20px">
+      <div id="lbMain"></div>
+      <div id="lbSide"></div>
+    </div>
+  `;
+  renderLb();
+}
+
+function filterLb(f) {
+  lbFilter = f;
+  document.querySelectorAll('#pageLeaderboard .tab').forEach((t,i)=>{
+    t.classList.toggle('active',['global','city','wins','votes'][i]===f);
+  });
+  renderLb();
+}
+
+function renderLb() {
+  let artists = DB.users.filter(u=>u.role==='artist'||u.wins>0);
+  if(lbFilter==='wins') artists.sort((a,b)=>b.wins-a.wins);
+  else if(lbFilter==='city') artists.sort((a,b)=>a.city.localeCompare(b.city));
+  else artists.sort((a,b)=>b.score-a.score);
+
+  const rankColors = ['rank-1','rank-2','rank-3'];
+
+  const mainEl = document.getElementById('lbMain');
+  mainEl.innerHTML = `
+    <div class="section-title">🏆 TOP ARTISTES</div>
+    ${artists.map((u,i)=>`
+    <div class="rank-item" onclick="viewArtist(${u.id})">
+      <div class="rank-num ${rankColors[i]||''}">${i+1}</div>
+      <div class="avatar" style="${i===0?'background:linear-gradient(135deg,var(--gold),var(--accent2))':i===1?'background:linear-gradient(135deg,#c0c0c0,#888)':i===2?'background:linear-gradient(135deg,#cd7f32,#a0522d)':''}">${u.avatar}</div>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px">
+          ${u.pseudo}
+          ${i===0?'<span class="badge badge-gold">Champion</span>':''}
+          ${currentUser?.id===u.id?'<span class="badge badge-blue">Moi</span>':''}
+        </div>
+        <div style="font-size:12px;color:var(--text3)">${u.city} · ${u.style}</div>
+        <div style="margin-top:6px">
+          <div class="progress"><div class="progress-bar-inner" style="width:${Math.min(100,Math.round(u.score/DB.users.sort((a,b)=>b.score-a.score)[0].score*100))}%"></div></div>
+        </div>
+      </div>
+      <div style="text-align:right;flex-shrink:0">
+        <div style="font-family:'Bebas Neue';font-size:24px;color:${i===0?'var(--gold)':i===1?'#c0c0c0':i===2?'#cd7f32':'var(--text)'}">${lbFilter==='wins'?u.wins:u.score}</div>
+        <div style="font-size:11px;color:var(--text3)">${lbFilter==='wins'?'victoires':'points'}</div>
+        <div style="font-size:11px;color:var(--green);margin-top:2px">${u.wins}W / ${u.losses}L</div>
+      </div>
+    </div>
+    `).join('')}
+  `;
+
+  document.getElementById('lbSide').innerHTML = `
+    <div class="card mb-20">
+      <div class="card-title mb-16">📊 Stats Globales</div>
+      ${[
+        ['Total Artistes', DB.users.filter(u=>u.role==='artist').length],
+        ['Battles Actifs', DB.battles.filter(b=>b.status==='active').length],
+        ['Total Battles', DB.battles.length],
+        ['Votes Totaux', DB.battles.reduce((s,b)=>s+totalVotes(b),0)],
+      ].map(([k,v])=>`
+      <div class="flex-between" style="padding:8px 0;border-bottom:1px solid var(--border)">
+        <span style="font-size:13px;color:var(--text2)">${k}</span>
+        <span style="font-weight:700;font-size:15px">${v}</span>
+      </div>`).join('')}
+    </div>
+    <div class="card">
+      <div class="card-title mb-16">🏙️ Top Villes</div>
+      ${['Paris','Marseille','Lyon','Lille','Bordeaux'].map((city,i)=>{
+        const cnt = DB.users.filter(u=>u.city===city&&u.role==='artist').length;
+        return `
+        <div style="margin-bottom:12px">
+          <div class="flex-between mb-4">
+            <span style="font-size:13px">${city}</span>
+            <span style="font-size:12px;color:var(--text3)">${cnt} artistes</span>
+          </div>
+          <div class="progress"><div class="progress-bar-inner" style="width:${20+i*15}%"></div></div>
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function viewArtist(id) {
+  if(id===currentUser?.id) { navigate('profile'); return; }
+  const u = getUser(id);
+  showNotif(`Profil de ${u?.pseudo} — fonctionnalité en développement`,'info');
+}
+
+// ================================
+// MAP / QUARTIER
+// ================================
+let selectedCity = null;
+
+function buildMap() {
+  const cities = ['Paris','Marseille','Lyon','Lille','Bordeaux'];
+  const cityData = cities.map(city=>{
+    const artists = DB.users.filter(u=>u.city===city&&u.role==='artist').length;
+    const battles = DB.battles.filter(b=>b.city===city).length;
+    const emojis = {Paris:'🗼',Marseille:'⚓',Lyon:'🦁',Lille:'🌷',Bordeaux:'🍷'};
+    return {city, artists, battles, emoji:emojis[city]||'🏙️'};
+  });
+
+  document.getElementById('pageMap').innerHTML = `
+    <div class="section-title">🏙️ CARTE DES ZONES</div>
+    <p style="color:var(--text3);margin-bottom:20px;font-size:14px">Sélectionne une ville pour voir ses battles et artistes</p>
+    <div class="grid grid-3 mb-24" style="gap:16px">
+      ${cityData.map(d=>`
+      <div class="city-zone ${selectedCity===d.city?'selected':''}" onclick="selectCity('${d.city}')">
+        <div class="city-icon">${d.emoji}</div>
+        <div class="city-name">${d.city}</div>
+        <div class="city-count">${d.artists} artistes · ${d.battles} battles</div>
+        <div style="margin-top:10px;display:flex;gap:6px;justify-content:center;flex-wrap:wrap">
+          ${DB.users.filter(u=>u.city===d.city&&u.role==='artist').slice(0,3).map(u=>`
+          <div class="avatar sm" title="${u.pseudo}">${u.avatar}</div>`).join('')}
+        </div>
+      </div>`).join('')}
+    </div>
+    <div id="cityDetail"></div>
+  `;
+  if(selectedCity) renderCityDetail(selectedCity);
+}
+
+function selectCity(city) {
+  selectedCity = city;
+  document.querySelectorAll('.city-zone').forEach(z=>{
+    z.classList.toggle('selected', z.querySelector('.city-name').textContent===city);
+  });
+  renderCityDetail(city);
+}
+
+function renderCityDetail(city) {
+  const artists = DB.users.filter(u=>u.city===city&&u.role==='artist');
+  const battles = DB.battles.filter(b=>b.city===city);
+  document.getElementById('cityDetail').innerHTML = `
+    <div class="grid grid-2" style="gap:20px">
+      <div>
+        <div class="section-title">🎤 ARTISTES — ${city}</div>
+        ${artists.length===0?'<div class="card" style="color:var(--text3);text-align:center">Aucun artiste dans cette ville</div>':''}
+        ${artists.map(u=>`
+        <div class="rank-item" onclick="viewArtist(${u.id})">
+          <div class="avatar">${u.avatar}</div>
+          <div style="flex:1">
+            <div style="font-weight:700">${u.pseudo}</div>
+            <div style="font-size:12px;color:var(--text3)">${u.neighborhood||city} · ${u.style}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-weight:700;color:var(--gold)">${u.score}pts</div>
+            <div style="font-size:11px;color:var(--green)">${u.wins}W</div>
+          </div>
+        </div>`).join('')}
+      </div>
+      <div>
+        <div class="section-title">⚔️ BATTLES — ${city}</div>
+        ${battles.length===0?'<div class="card" style="color:var(--text3);text-align:center">Aucun battle dans cette zone</div>':''}
+        ${battles.map(b=>{
+          const cha=getUser(b.challenger_id), opp=getUser(b.opponent_id);
+          return `
+          <div class="card mb-12" onclick="navigate('battles')" style="cursor:pointer">
+            <div class="flex-between mb-8">
+              <span style="font-weight:600;font-size:14px">${b.title}</span>
+              ${statusBadge(b.status)}
+            </div>
+            <div style="font-size:13px;color:var(--text2)">${cha?.pseudo} vs ${opp?.pseudo}</div>
+            <div style="font-size:12px;color:var(--text3);margin-top:4px">${totalVotes(b)} votes · ${b.neighborhood||city}</div>
+          </div>`;
+        }).join('')}
+        <button class="btn btn-primary w-full mt-8" onclick="openModal('battleModal')">⚔️ Battle à ${city}</button>
+      </div>
+    </div>
+  `;
+}
+
+// ================================
+// STUDIO
+// ================================
+let voiceVol = 80, instruVol = 70, reverbVal = 20, pitchVal = 0;
+
+function buildStudio() {
+  document.getElementById('pageStudio').innerHTML = `
+    <div class="grid grid-2" style="gap:24px">
+      <!-- LEFT: Enregistrement -->
+      <div>
+        <div class="section-title">🎙️ ENREGISTREMENT</div>
+        
+        <div class="studio-panel mb-16">
+          <div class="card-title mb-12">Sélectionner une instru</div>
+          <select class="form-control mb-12" id="studioInstru" onchange="selectInstru(this.value)">
+            <option value="">-- Aucune instru --</option>
+            ${DB.instrus.map(i=>`<option value="${i.id}">${i.name} — ${i.style} ${i.bpm}BPM</option>`).join('')}
+          </select>
+          ${selectedInstru ? `
+          <div class="audio-player">
+            <div class="play-btn" onclick="togglePlay(this)">▶</div>
+            <div class="progress-bar"><div class="progress-fill" style="width:0%"></div></div>
+            <span class="audio-time">${selectedInstru.duration}</span>
+          </div>` : '<div style="padding:10px;background:var(--bg);border-radius:8px;text-align:center;color:var(--text3);font-size:13px">Sélectionne une instru pour écouter</div>'}
+        </div>
+
+        <div class="studio-panel mb-16">
+          <div class="card-title mb-16">Piste Voix</div>
+          ${waveformHtml(32)}
+          <div style="display:flex;justify-content:center;margin-top:16px;gap:16px;align-items:center">
+            <button class="btn btn-secondary btn-icon" onclick="studioAction('rewind')" title="Retour">⏮</button>
+            <div class="record-btn ${isRecording?'recording':''}" id="recordBtn" onclick="toggleRecording()">
+              ${isRecording?'⬛':'🎙'}
+            </div>
+            <button class="btn btn-secondary btn-icon" onclick="studioAction('stop')" title="Stop">⏹</button>
+          </div>
+          <div id="recordTimer" style="text-align:center;margin-top:12px;font-family:'Bebas Neue';font-size:24px;color:${isRecording?'var(--accent)':'var(--text3)'}">
+            ${formatTime(recordingTime)}
+          </div>
+          ${isRecording?'<div style="text-align:center;font-size:12px;color:var(--accent);animation:pulse 1s infinite">● ENREGISTREMENT EN COURS</div>':''}
+        </div>
+
+        <div class="studio-panel">
+          <div class="card-title mb-16">Mixage</div>
+          <div class="slider-row">
+            <span class="slider-label">Voix</span>
+            <input type="range" min="0" max="100" value="${voiceVol}" id="voiceVol" oninput="updateSlider('voiceVol',this.value)">
+            <span class="slider-val" id="voiceVolVal">${voiceVol}%</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Instru</span>
+            <input type="range" min="0" max="100" value="${instruVol}" id="instruVol" oninput="updateSlider('instruVol',this.value)">
+            <span class="slider-val" id="instruVolVal">${instruVol}%</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Reverb</span>
+            <input type="range" min="0" max="100" value="${reverbVal}" id="reverbSlider" oninput="updateSlider('reverbSlider',this.value)">
+            <span class="slider-val" id="reverbSliderVal">${reverbVal}%</span>
+          </div>
+          <div class="slider-row">
+            <span class="slider-label">Pitch</span>
+            <input type="range" min="-12" max="12" value="${pitchVal}" id="pitchSlider" oninput="updateSlider('pitchSlider',this.value)">
+            <span class="slider-val" id="pitchSliderVal">${pitchVal>=0?'+':''}${pitchVal}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: FX + Export -->
+      <div>
+        <div class="section-title">🎚️ EFFETS & EXPORT</div>
+        <div class="studio-panel mb-16">
+          <div class="card-title mb-16">Effets</div>
+          <div style="display:flex;justify-content:space-around;flex-wrap:wrap;gap:16px">
+            ${[
+              {name:'Reverb',icon:'🌊',id:'fx-reverb'},
+              {name:'Autotune',icon:'🎵',id:'fx-autotune'},
+              {name:'Echo',icon:'📣',id:'fx-echo'},
+              {name:'Compressor',icon:'🔧',id:'fx-comp'},
+            ].map(fx=>`
+            <div class="knob-container" onclick="toggleFx('${fx.id}',this)">
+              <div class="knob" id="${fx.id}">
+                <div class="knob-indicator"></div>
+                <span style="font-size:16px">${fx.icon}</span>
+              </div>
+              <span class="knob-label">${fx.name}</span>
+              <span style="font-size:10px;color:var(--text3)" id="${fx.id}-status">OFF</span>
+            </div>`).join('')}
+          </div>
+        </div>
+
+        <div class="studio-panel mb-16">
+          <div class="card-title mb-12">Mes Enregistrements</div>
+          ${[
+            {name:'Freestyle #1', date:'Hier', dur:'2:34'},
+            {name:'Battle vs MarseilleBoss', date:'Il y a 3j', dur:'1:58'},
+            {name:'Test Reverb', date:'Il y a 5j', dur:'0:47'},
+          ].map(r=>`
+          <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+            <div>
+              <div style="font-size:13px;font-weight:600">${r.name}</div>
+              <div style="font-size:11px;color:var(--text3)">${r.date} · ${r.dur}</div>
+            </div>
+            <div style="display:flex;gap:6px">
+              <button class="btn btn-ghost btn-sm" onclick="showNotif('Lecture...','info')">▶</button>
+              <button class="btn btn-ghost btn-sm" onclick="downloadTrack('${r.name}')">⬇</button>
+              <button class="btn btn-ghost btn-sm" onclick="showNotif('Supprimé','info')">🗑</button>
+            </div>
+          </div>`).join('')}
+        </div>
+
+        <div class="studio-panel">
+          <div class="card-title mb-12">Export Final</div>
+          <p style="color:var(--text3);font-size:13px;margin-bottom:16px">Exporte ta track avec tous les effets appliqués.</p>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <button class="btn btn-primary" onclick="exportTrack('mp3')">📥 Exporter en MP3</button>
+            <button class="btn btn-secondary" onclick="exportTrack('wav')">📥 Exporter en WAV</button>
+            <button class="btn btn-gold" onclick="sendToBattle()">⚔️ Envoyer à un Battle</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function selectInstru(id) {
+  if(!id) { selectedInstru=null; buildStudio(); return; }
+  selectedInstru = DB.instrus.find(i=>i.id===parseInt(id));
+  buildStudio();
+  document.getElementById('studioInstru').value=id;
+  showNotif(`Instru "${selectedInstru.name}" chargée 🎵`,'success');
+}
+
+function toggleRecording() {
+  isRecording = !isRecording;
+  if(isRecording) {
+    showNotif('Enregistrement démarré 🎙️','info');
+    recordingInterval = setInterval(()=>{
+      recordingTime++;
+      const t=document.getElementById('recordTimer');
+      if(t) { t.textContent=formatTime(recordingTime); t.style.color='var(--accent)'; }
+    },1000);
+  } else {
+    clearInterval(recordingInterval);
+    showNotif(`Enregistrement sauvegardé (${formatTime(recordingTime)}) ✓`,'success');
+    recordingTime=0;
+  }
+  buildStudio();
+  if(isRecording&&document.getElementById('studioInstru')) document.getElementById('studioInstru').value=selectedInstru?.id||'';
+}
+
+function stopRecording() { if(isRecording){isRecording=false;clearInterval(recordingInterval);recordingTime=0;} }
+
+function updateSlider(id, val) {
+  const map={voiceVol:v=>`${v}%`,instruVol:v=>`${v}%`,reverbSlider:v=>`${v}%`,pitchSlider:v=>`${v>=0?'+':''}${v}`};
+  const valEl=document.getElementById(id+'Val');
+  if(valEl) valEl.textContent=(map[id]||((v)=>v))(val);
+  if(id==='voiceVol') voiceVol=+val;
+  if(id==='instruVol') instruVol=+val;
+  if(id==='reverbSlider') reverbVal=+val;
+  if(id==='pitchSlider') pitchVal=+val;
+}
+
+function toggleFx(id, container) {
+  const knob=document.getElementById(id);
+  const status=document.getElementById(id+'-status');
+  const isOn=status?.textContent==='ON';
+  if(isOn) { knob.style.borderColor='var(--border2)'; status.textContent='OFF'; status.style.color='var(--text3)'; }
+  else { knob.style.borderColor='var(--accent)'; knob.style.background='rgba(255,60,60,0.15)'; status.textContent='ON'; status.style.color='var(--accent)'; }
+}
+
+function studioAction(a) {
+  const msgs={rewind:'Retour au début',stop:'Lecture stoppée'};
+  showNotif(msgs[a]||a,'info');
+}
+
+function formatTime(s) { return `${Math.floor(s/60).toString().padStart(2,'0')}:${(s%60).toString().padStart(2,'0')}` }
+
+function downloadTrack(name) {
+  const blob=new Blob(['GOMDE Audio Export — '+name],{type:'audio/mpeg'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=name+'.mp3'; a.click();
+  showNotif(`"${name}" téléchargé ✓`,'success');
+}
+
+function exportTrack(fmt) {
+  const blob=new Blob(['GOMDE Track Export'],{type:`audio/${fmt}`});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=`track_${Date.now()}.${fmt}`; a.click();
+  showNotif(`Track exportée en ${fmt.toUpperCase()} ✓`,'success');
+}
+
+function sendToBattle() {
+  openModal('battleModal');
+  showNotif('Sélectionne un adversaire pour ton battle !','info');
+}
+
+// ================================
+// INSTRUS
+// ================================
+let instruFilter = 'Tous';
+
+function buildInstrus() {
+  const styles = ['Tous','Trap','Drill','Afro','Boom Bap'];
+  const filtered = instruFilter==='Tous' ? DB.instrus : DB.instrus.filter(i=>i.style===instruFilter);
+
+  document.getElementById('pageInstrus').innerHTML = `
+    <div class="flex-between mb-24" style="flex-wrap:wrap;gap:12px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        ${styles.map(s=>`<button class="btn ${instruFilter===s?'btn-primary':'btn-ghost'}" onclick="filterInstrus('${s}')">${s}</button>`).join('')}
+      </div>
+      <div style="display:flex;gap:8px">
+        <input type="text" class="form-control" placeholder="Rechercher..." style="width:180px" oninput="searchInstrus(this.value)">
+        <button class="btn btn-secondary" onclick="openModal('uploadModal')">⬆️ Upload</button>
+      </div>
+    </div>
+    <div class="grid grid-4 mb-24" style="gap:12px">
+      <div class="stat-card"><div class="stat-label">Total</div><div class="stat-value">${DB.instrus.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Trap</div><div class="stat-value text-accent">${DB.instrus.filter(i=>i.style==='Trap').length}</div></div>
+      <div class="stat-card"><div class="stat-label">Drill</div><div class="stat-value" style="color:var(--blue)">${DB.instrus.filter(i=>i.style==='Drill').length}</div></div>
+      <div class="stat-card"><div class="stat-label">Afro</div><div class="stat-value" style="color:var(--green)">${DB.instrus.filter(i=>i.style==='Afro').length}</div></div>
+    </div>
+    <div id="instrusList">
+      ${filtered.map(i=>instruCardHtml(i)).join('')}
+    </div>
+  `;
+}
+
+function instruCardHtml(i) {
+  const styleColors = {Trap:'var(--accent)',Drill:'var(--blue)',Afro:'var(--green)','Boom Bap':'var(--gold)'};
+  const color = styleColors[i.style]||'var(--text2)';
+  return `
+  <div class="instru-card mb-12">
+    <div class="instru-thumb" style="background:linear-gradient(135deg,${color},rgba(0,0,0,0.3))">🎵</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:700;font-size:14px;display:flex;align-items:center;gap:8px">
+        ${i.name}
+        <span class="badge" style="background:rgba(0,0,0,0.3);color:${color}">${i.style}</span>
+      </div>
+      <div style="font-size:12px;color:var(--text3)">${i.artist} · ${i.bpm} BPM · ${i.duration}</div>
+      <div style="margin-top:8px">
+        ${waveformHtml(16)}
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0">
+      <div style="font-size:12px;color:var(--text3)">${i.plays.toLocaleString()} plays</div>
+      <div style="display:flex;gap:6px">
+        <button class="btn btn-ghost btn-sm" onclick="playInstru(${i.id})" title="Écouter">▶</button>
+        <button class="btn btn-secondary btn-sm" onclick="useInstru(${i.id})" title="Utiliser">🎙️</button>
+        <button class="btn btn-gold btn-sm" onclick="downloadInstru(${i.id})" title="Télécharger">⬇</button>
+      </div>
+      <div style="font-size:11px;color:var(--text3)">${i.downloads} DL</div>
+    </div>
+  </div>`;
+}
+
+function filterInstrus(s) { instruFilter=s; buildInstrus(); }
+function searchInstrus(q) {
+  const list=document.getElementById('instrusList');
+  if(!list) return;
+  const filtered=DB.instrus.filter(i=>i.name.toLowerCase().includes(q.toLowerCase())||i.style.toLowerCase().includes(q.toLowerCase())||i.artist.toLowerCase().includes(q.toLowerCase()));
+  list.innerHTML=filtered.map(i=>instruCardHtml(i)).join('');
+  if(!filtered.length) list.innerHTML='<div class="card" style="text-align:center;color:var(--text3)">Aucune instru trouvée</div>';
+}
+function playInstru(id) { const i=DB.instrus.find(x=>x.id===id); showNotif(`🎵 Lecture : ${i?.name}`,'info'); }
+function useInstru(id) { selectedInstru=DB.instrus.find(x=>x.id===id); navigate('studio'); showNotif(`Instru "${selectedInstru?.name}" chargée dans le studio ✓`,'success'); }
+function downloadInstru(id) {
+  const i=DB.instrus.find(x=>x.id===id);
+  if(i) i.downloads++;
+  const blob=new Blob(['GOMDE Instru — '+i?.name],{type:'audio/mpeg'});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement('a'); a.href=url; a.download=(i?.name||'instru')+'.mp3'; a.click();
+  showNotif(`"${i?.name}" téléchargée ✓`,'success');
+  buildInstrus();
+}
+function uploadInstru() {
+  const name=document.getElementById('uploadName').value.trim();
+  const style=document.getElementById('uploadStyle').value;
+  const bpm=parseInt(document.getElementById('uploadBpm').value)||120;
+  if(!name) { showNotif('Donne un nom à ton instru','error'); return; }
+  DB.instrus.unshift({id:DB.instrus.length+1,name,style,bpm,duration:'3:00',artist:currentUser?.pseudo||'Vous',downloads:0,plays:0});
+  closeModal('uploadModal');
+  showNotif(`"${name}" uploadée ✓`,'success');
+  buildInstrus();
+  document.getElementById('uploadName').value='';
+  document.getElementById('uploadBpm').value='';
+}
+
+// ================================
+// PROFILE
+// ================================
+function buildProfile() {
+  const u = currentUser;
+  const myBattles = DB.battles.filter(b=>b.challenger_id===u.id||b.opponent_id===u.id);
+  const winRate = u.battles_count ? Math.round(u.wins/u.battles_count*100) : 0;
+  const rank = [...DB.users].sort((a,b)=>b.score-a.score).findIndex(x=>x.id===u.id)+1;
+
+  document.getElementById('pageProfile').innerHTML = `
+    <div class="grid" style="grid-template-columns:300px 1fr;gap:24px">
+      <!-- CARD PROFIL -->
+      <div>
+        <div class="card mb-16" style="text-align:center">
+          <div class="avatar xl" style="margin:0 auto 16px;font-size:48px">${u.avatar}</div>
+          <div style="font-family:'Bebas Neue';font-size:28px;letter-spacing:2px">${u.pseudo}</div>
+          <div style="color:var(--text3);font-size:14px;margin-bottom:4px">${u.city}${u.neighborhood?` · ${u.neighborhood}`:''}</div>
+          <div class="badge ${u.role==='admin'?'badge-red':u.role==='artist'?'badge-blue':'badge-gray'} mb-12">${u.role==='admin'?'Administrateur':u.role==='artist'?'Artiste':'Fan'}</div>
+          <p style="font-size:13px;color:var(--text2);line-height:1.6;margin-bottom:16px">${u.bio||'Pas encore de bio...'}</p>
+          ${u.style&&u.style!=='—'?`<span class="badge badge-purple">${u.style}</span>`:''}
+          <div class="divider"></div>
+          <button class="btn btn-secondary w-full" onclick="openProfileEdit()">✏️ Modifier le profil</button>
+          ${u.role==='artist'?`<button class="btn btn-ghost w-full mt-8" onclick="navigate('studio')">🎙️ Aller au Studio</button>`:''}
+        </div>
+        <div class="card">
+          <div class="card-title mb-16">📊 Statistiques</div>
+          ${[
+            ['Classement', `#${rank}`, 'var(--gold)'],
+            ['Score', u.score, 'var(--accent)'],
+            ['Victoires', u.wins, 'var(--green)'],
+            ['Défaites', u.losses, 'var(--text2)'],
+            ['Win Rate', winRate+'%', winRate>=50?'var(--green)':'var(--accent)'],
+            ['Followers', u.followers, 'var(--blue)'],
+          ].map(([k,v,c])=>`
+          <div class="flex-between" style="padding:8px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:13px;color:var(--text2)">${k}</span>
+            <span style="font-weight:700;color:${c}">${v}</span>
+          </div>`).join('')}
+          <div style="margin-top:16px">
+            <div class="flex-between mb-4"><span style="font-size:12px;color:var(--text3)">Progression Win Rate</span><span style="font-size:12px;color:var(--text2)">${winRate}%</span></div>
+            <div class="progress"><div class="progress-bar-inner" style="width:${winRate}%"></div></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ACTIVITÉ -->
+      <div>
+        <div class="tabs mb-24" id="profileTabs">
+          <div class="tab active" onclick="profileTab('battles',this)">⚔️ Battles</div>
+          <div class="tab" onclick="profileTab('instrus',this)">🎵 Mes Instrus</div>
+          <div class="tab" onclick="profileTab('stats',this)">📈 Statistiques</div>
+        </div>
+        <div id="profileTabContent">
+          ${myBattles.length===0?`
+          <div class="card" style="text-align:center;padding:40px">
+            <div style="font-size:48px;margin-bottom:16px">⚔️</div>
+            <div style="font-size:16px;font-weight:600;margin-bottom:8px">Aucun battle encore</div>
+            <div style="color:var(--text3);margin-bottom:20px">Lance-toi et défie les meilleurs !</div>
+            <button class="btn btn-primary" onclick="openModal('battleModal')">Créer mon premier battle</button>
+          </div>` :
+          myBattles.map(b=>{
+            const opp=getUser(b.challenger_id===u.id?b.opponent_id:b.challenger_id);
+            const isWinner=b.status==='completed'&&b.winner_id===u.id;
+            const isLoser=b.status==='completed'&&b.winner_id&&b.winner_id!==u.id;
+            return `
+            <div class="battle-card mb-12" onclick="navigate('battles')">
+              <div style="padding:14px 20px">
+                <div class="flex-between">
+                  <div>
+                    <div style="font-weight:700">${b.title}</div>
+                    <div style="font-size:12px;color:var(--text3)">vs ${opp?.pseudo} · ${b.city}</div>
+                  </div>
+                  <div style="display:flex;gap:6px;align-items:center">
+                    ${isWinner?'<span class="badge badge-gold">🏆 Victoire</span>':''}
+                    ${isLoser?'<span class="badge badge-gray">Défaite</span>':''}
+                    ${statusBadge(b.status)}
+                  </div>
+                </div>
+                ${b.status!=='pending'?`
+                <div style="margin-top:10px">
+                  <div class="vote-bar"><div class="vote-bar-fill" style="width:${b.challenger_id===u.id?votePercA(b):votePercB(b)}%"></div></div>
+                  <div style="font-size:11px;color:var(--text3);margin-top:4px">${totalVotes(b)} votes totaux</div>
+                </div>`:''}
+              </div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>
+  `;
+}
+
+function profileTab(tab, el) {
+  document.querySelectorAll('#profileTabs .tab').forEach(t=>t.classList.remove('active'));
+  el.classList.add('active');
+  const content=document.getElementById('profileTabContent');
+  if(tab==='instrus') {
+    content.innerHTML=`
+      <div class="card" style="text-align:center;padding:20px">
+        <div style="font-size:13px;color:var(--text3);margin-bottom:12px">Tes instrus uploadées</div>
+        ${DB.instrus.filter(i=>i.artist===currentUser?.pseudo).length===0?
+          '<div style="color:var(--text3)">Tu n\'as pas encore uploadé d\'instru</div>':
+          DB.instrus.filter(i=>i.artist===currentUser?.pseudo).map(i=>instruCardHtml(i)).join('')}
+        <button class="btn btn-secondary mt-16" onclick="openModal('uploadModal')">⬆️ Uploader une instru</button>
+      </div>`;
+  } else if(tab==='stats') {
+    const chartBars=[30,60,45,80,55,90,70].map(h=>`<div class="chart-bar" style="height:${h}%"></div>`).join('');
+    content.innerHTML=`
+      <div class="card mb-16">
+        <div class="card-title mb-16">Votes reçus (30 derniers jours)</div>
+        <div class="chart-area">${chartBars}</div>
+      </div>
+      <div class="grid grid-3" style="gap:12px">
+        <div class="stat-card"><div class="stat-label">Total Votes</div><div class="stat-value text-accent">${DB.battles.filter(b=>b.challenger_id===currentUser?.id||b.opponent_id===currentUser?.id).reduce((s,b)=>{const isC=b.challenger_id===currentUser?.id;return s+(isC?b.votes_a:b.votes_b)},0)}</div></div>
+        <div class="stat-card"><div class="stat-label">Battles</div><div class="stat-value">${currentUser?.battles_count}</div></div>
+        <div class="stat-card"><div class="stat-label">Ratio</div><div class="stat-value" style="color:var(--green)">${currentUser?.battles_count?Math.round(currentUser.wins/currentUser.battles_count*100):0}%</div></div>
+      </div>`;
+  } else {
+    buildProfile(); // rebuild to show battles tab
+  }
+}
+
+function openProfileEdit() {
+  document.getElementById('editBio').value = currentUser?.bio||'';
+  document.getElementById('editCity').value = currentUser?.city||'';
+  document.getElementById('editNeighborhood').value = currentUser?.neighborhood||'';
+  document.getElementById('editStyle').value = currentUser?.style||'Freestyle';
+  openModal('profileEditModal');
+}
+
+function saveProfile() {
+  currentUser.bio = document.getElementById('editBio').value;
+  currentUser.city = document.getElementById('editCity').value;
+  currentUser.neighborhood = document.getElementById('editNeighborhood').value;
+  currentUser.style = document.getElementById('editStyle').value;
+  const u = DB.users.find(x=>x.id===currentUser.id);
+  if(u) Object.assign(u, {bio:currentUser.bio,city:currentUser.city,neighborhood:currentUser.neighborhood,style:currentUser.style});
+  closeModal('profileEditModal');
+  showNotif('Profil mis à jour ✓','success');
+  buildProfile();
+}
+
+// ================================
+// ARTISTES
+// ================================
+let artistSearch = '';
+
+function buildArtists() {
+  const artists = DB.users.filter(u=>(u.role==='artist')&&(artistSearch===''||u.pseudo.toLowerCase().includes(artistSearch.toLowerCase())||u.city.toLowerCase().includes(artistSearch.toLowerCase())));
+  document.getElementById('pageArtists').innerHTML = `
+    <div class="flex-between mb-24" style="flex-wrap:wrap;gap:12px">
+      <div>
+        <div class="section-title" style="margin:0">🎤 Artistes (${DB.users.filter(u=>u.role==='artist').length})</div>
+      </div>
+      <input type="text" class="form-control" placeholder="Rechercher par pseudo ou ville..." style="width:260px" value="${artistSearch}" oninput="searchArtists(this.value)">
+    </div>
+    <div class="grid grid-3" style="gap:16px">
+      ${artists.map(u=>{
+        const rank=[...DB.users].sort((a,b)=>b.score-a.score).findIndex(x=>x.id===u.id)+1;
+        const isMe=u.id===currentUser?.id;
+        return `
+        <div class="card" style="cursor:pointer${isMe?';border-color:var(--accent)':''}" onclick="${isMe?`navigate('profile')`:`showArtistModal(${u.id})`}">
+          <div style="text-align:center;padding:8px 0">
+            <div class="avatar lg" style="margin:0 auto 12px;${rank===1?'background:linear-gradient(135deg,var(--gold),var(--accent2))':''}">${u.avatar}</div>
+            <div style="font-weight:700;font-size:16px">${u.pseudo}${isMe?' (Moi)':''}</div>
+            <div style="color:var(--text3);font-size:13px;margin-bottom:8px">${u.city}${u.neighborhood?` · ${u.neighborhood}`:''}</div>
+            <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+              <span class="badge badge-purple">${u.style}</span>
+              ${rank<=3?`<span class="badge badge-gold">#${rank}</span>`:''}
+            </div>
+            <p style="font-size:12px;color:var(--text2);line-height:1.5;height:36px;overflow:hidden">${u.bio||'Pas de bio.'}</p>
+          </div>
+          <div class="divider"></div>
+          <div style="display:flex;justify-content:space-around;text-align:center">
+            <div><div style="font-weight:700;color:var(--gold)">${u.score}</div><div style="font-size:11px;color:var(--text3)">score</div></div>
+            <div><div style="font-weight:700;color:var(--green)">${u.wins}W</div><div style="font-size:11px;color:var(--text3)">victoires</div></div>
+            <div><div style="font-weight:700;color:var(--blue)">${u.followers}</div><div style="font-size:11px;color:var(--text3)">followers</div></div>
+          </div>
+          ${!isMe?`
+          <div style="display:flex;gap:6px;margin-top:12px">
+            <button class="btn btn-secondary btn-sm" style="flex:1" onclick="event.stopPropagation();followArtist(${u.id},this)">+ Follow</button>
+            <button class="btn btn-primary btn-sm" style="flex:1" onclick="event.stopPropagation();challengeArtist(${u.id})">⚔️ Défier</button>
+          </div>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+    ${artists.length===0?'<div class="card" style="text-align:center;color:var(--text3);padding:40px">Aucun artiste trouvé</div>':''}
+  `;
+}
+
+function searchArtists(q) { artistSearch=q; buildArtists(); }
+function followArtist(id, btn) {
+  const u=getUser(id);
+  if(u) u.followers++;
+  btn.textContent='✓ Suivi';
+  btn.classList.replace('btn-secondary','btn-ghost');
+  btn.disabled=true;
+  showNotif(`Tu suis maintenant ${u?.pseudo} !`,'success');
+}
+function challengeArtist(id) {
+  const u=getUser(id);
+  if(u) document.getElementById('battleOpponent').value=id;
+  openModal('battleModal');
+  showNotif(`Défi envoyé à ${u?.pseudo} !`,'info');
+}
+function showArtistModal(id) { const u=getUser(id); showNotif(`Profil de ${u?.pseudo} — ${u?.wins}W/${u?.losses}L · Score: ${u?.score}`,'info'); }
+
+// ================================
+// ADMIN
+// ================================
+let adminTab = 'users';
+
+function buildAdmin() {
+  if(currentUser?.role!=='admin') { navigate('home'); return; }
+  const totalUsers=DB.users.length;
+  const totalBattles=DB.battles.length;
+  const activeBattles=DB.battles.filter(b=>b.status==='active').length;
+  const totalVotesSum=DB.battles.reduce((s,b)=>s+totalVotes(b),0);
+
+  document.getElementById('pageAdmin').innerHTML = `
+    <div class="grid grid-4 mb-24" style="gap:16px">
+      <div class="stat-card"><div class="stat-label">Utilisateurs</div><div class="stat-value text-accent">${totalUsers}</div><div class="stat-sub">+3 cette semaine</div></div>
+      <div class="stat-card"><div class="stat-label">Battles Total</div><div class="stat-value" style="color:var(--blue)">${totalBattles}</div><div class="stat-sub">${activeBattles} actifs</div></div>
+      <div class="stat-card"><div class="stat-label">Instrus</div><div class="stat-value" style="color:var(--green)">${DB.instrus.length}</div></div>
+      <div class="stat-card"><div class="stat-label">Votes Totaux</div><div class="stat-value" style="color:var(--gold)">${totalVotesSum}</div></div>
+    </div>
+
+    <div class="tabs mb-24" id="adminTabs">
+      <div class="tab ${adminTab==='users'?'active':''}" onclick="switchAdminTab('users')">👤 Utilisateurs</div>
+      <div class="tab ${adminTab==='battles'?'active':''}" onclick="switchAdminTab('battles')">⚔️ Battles</div>
+      <div class="tab ${adminTab==='instrus'?'active':''}" onclick="switchAdminTab('instrus')">🎵 Instrus</div>
+      <div class="tab ${adminTab==='stats'?'active':''}" onclick="switchAdminTab('stats')">📊 Statistiques</div>
+    </div>
+    <div id="adminContent"></div>
+  `;
+  renderAdminTab();
+}
+
+function switchAdminTab(tab) {
+  adminTab=tab;
+  document.querySelectorAll('#adminTabs .tab').forEach((t,i)=>{
+    t.classList.toggle('active',['users','battles','instrus','stats'][i]===tab);
+  });
+  renderAdminTab();
+}
+
+function renderAdminTab() {
+  const el=document.getElementById('adminContent');
+  if(!el) return;
+  if(adminTab==='users') {
+    el.innerHTML=`
+      <div class="flex-between mb-16">
+        <div class="card-title">Gestion des utilisateurs</div>
+        <input type="text" class="form-control" placeholder="Rechercher..." style="width:200px">
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto">
+        <table class="data-table">
+          <thead><tr>
+            <th>Utilisateur</th><th>Rôle</th><th>Ville</th><th>Score</th><th>Battles</th><th>Actions</th>
+          </tr></thead>
+          <tbody>
+            ${DB.users.map(u=>`
+            <tr>
+              <td>
+                <div style="display:flex;align-items:center;gap:10px">
+                  <div class="avatar sm">${u.avatar}</div>
+                  <div>
+                    <div style="font-weight:600">${u.pseudo}</div>
+                    <div style="font-size:11px;color:var(--text3)">${u.email}</div>
+                  </div>
+                </div>
+              </td>
+              <td><span class="badge ${u.role==='admin'?'badge-red':u.role==='artist'?'badge-blue':'badge-gray'}">${u.role}</span></td>
+              <td style="color:var(--text2)">${u.city}</td>
+              <td style="font-weight:700;color:var(--gold)">${u.score}</td>
+              <td>${u.battles_count}</td>
+              <td>
+                <div style="display:flex;gap:6px">
+                  <button class="btn btn-ghost btn-sm" onclick="adminEditUser(${u.id})" title="Modifier">✏️</button>
+                  <button class="btn btn-ghost btn-sm" onclick="adminBanUser(${u.id},'${u.pseudo}')" title="Bannir" ${u.role==='admin'?'disabled':''}>🚫</button>
+                </div>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } else if(adminTab==='battles') {
+    el.innerHTML=`
+      <div class="card-title mb-16">Gestion des battles</div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto">
+        <table class="data-table">
+          <thead><tr>
+            <th>Battle</th><th>Statut</th><th>Votes</th><th>Ville</th><th>Actions</th>
+          </tr></thead>
+          <tbody>
+            ${DB.battles.map(b=>{
+              const cha=getUser(b.challenger_id),opp=getUser(b.opponent_id);
+              return `
+              <tr>
+                <td>
+                  <div style="font-weight:600">${b.title}</div>
+                  <div style="font-size:11px;color:var(--text3)">${cha?.pseudo} vs ${opp?.pseudo}</div>
+                </td>
+                <td>${statusBadge(b.status)}</td>
+                <td>${totalVotes(b)}</td>
+                <td style="color:var(--text2)">${b.city}</td>
+                <td>
+                  <div style="display:flex;gap:6px">
+                    <button class="btn btn-ghost btn-sm" onclick="adminCloseBattle(${b.id})">✓ Clore</button>
+                    <button class="btn btn-ghost btn-sm" onclick="adminDeleteBattle(${b.id})">🗑</button>
+                  </div>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } else if(adminTab==='instrus') {
+    el.innerHTML=`
+      <div class="flex-between mb-16">
+        <div class="card-title">Gestion des instrus</div>
+        <button class="btn btn-primary btn-sm" onclick="openModal('uploadModal')">⬆️ Ajouter</button>
+      </div>
+      <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:auto">
+        <table class="data-table">
+          <thead><tr>
+            <th>Nom</th><th>Style</th><th>BPM</th><th>Artist</th><th>DL</th><th>Actions</th>
+          </tr></thead>
+          <tbody>
+            ${DB.instrus.map(i=>`
+            <tr>
+              <td style="font-weight:600">${i.name}</td>
+              <td><span class="badge badge-blue">${i.style}</span></td>
+              <td>${i.bpm}</td>
+              <td style="color:var(--text2)">${i.artist}</td>
+              <td>${i.downloads}</td>
+              <td>
+                <button class="btn btn-ghost btn-sm" onclick="adminDeleteInstru(${i.id})">🗑</button>
+              </td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  } else {
+    const chartBars=[55,70,48,85,60,92,78,64,88,74,90,68].map(h=>`<div class="chart-bar" style="height:${h}%"></div>`).join('');
+    el.innerHTML=`
+      <div class="grid grid-2" style="gap:20px">
+        <div class="card">
+          <div class="card-title mb-16">Activité mensuelle</div>
+          <div class="chart-area">${chartBars}</div>
+          <div style="display:flex;justify-content:space-between;margin-top:8px">
+            ${['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'].map(m=>`<span style="font-size:10px;color:var(--text3)">${m}</span>`).join('')}
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-title mb-16">Répartition par ville</div>
+          ${['Paris','Marseille','Lyon','Lille','Bordeaux'].map((city,i)=>{
+            const cnt=DB.users.filter(u=>u.city===city).length;
+            const pct=Math.round(cnt/DB.users.length*100);
+            return `
+            <div style="margin-bottom:14px">
+              <div class="flex-between mb-4">
+                <span style="font-size:13px;font-weight:600">${city}</span>
+                <span style="font-size:12px;color:var(--text3)">${cnt} users (${pct}%)</span>
+              </div>
+              <div class="progress"><div class="progress-bar-inner" style="width:${pct}%"></div></div>
+            </div>`;
+          }).join('')}
+        </div>
+        <div class="card">
+          <div class="card-title mb-16">Dernières actions</div>
+          ${[
+            {icon:'👤',msg:'Nouvel artiste inscrit : StreetVoice',time:'Il y a 2h'},
+            {icon:'⚔️',msg:'Battle créé : Paris vs Marseille',time:'Il y a 3h'},
+            {icon:'🗳️',msg:'432 votes sur "Trap Royale"',time:'Il y a 5h'},
+            {icon:'🎵',msg:'Instru "Grind Time" : 891 DL',time:'Hier'},
+          ].map(a=>`
+          <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+            <span style="font-size:18px">${a.icon}</span>
+            <div>
+              <div style="font-size:13px">${a.msg}</div>
+              <div style="font-size:11px;color:var(--text3)">${a.time}</div>
+            </div>
+          </div>`).join('')}
+        </div>
+        <div class="card">
+          <div class="card-title mb-16">Actions rapides</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <button class="btn btn-secondary w-full" onclick="showNotif('Rapport généré ✓','success')">📊 Exporter rapport</button>
+            <button class="btn btn-secondary w-full" onclick="showNotif('Cache vidé ✓','success')">🔄 Vider le cache</button>
+            <button class="btn btn-secondary w-full" onclick="showNotif('Sauvegarde créée ✓','success')">💾 Sauvegarder les données</button>
+            <button class="btn btn-ghost w-full" onclick="showNotif('Notification envoyée à tous les utilisateurs','info')">📣 Notifier tous les users</button>
+          </div>
+        </div>
+      </div>`;
+  }
+}
+
+function adminEditUser(id) { const u=getUser(id); showNotif(`Modification de ${u?.pseudo} — interface en développement`,'info'); }
+function adminBanUser(id, pseudo) {
+  if(confirm(`Bannir ${pseudo} ?`)) {
+    const idx=DB.users.findIndex(u=>u.id===id);
+    if(idx>-1) DB.users.splice(idx,1);
+    showNotif(`${pseudo} a été banni`,'success');
+    renderAdminTab();
+  }
+}
+function adminCloseBattle(id) {
+  const b=getBattle(id);
+  if(!b||b.status==='completed') { showNotif('Battle déjà terminé','info'); return; }
+  b.status='completed';
+  b.winner_id=b.votes_a>=b.votes_b?b.challenger_id:b.opponent_id;
+  showNotif('Battle clos manuellement','success');
+  renderAdminTab();
+}
+function adminDeleteBattle(id) {
+  if(confirm('Supprimer ce battle ?')) {
+    const idx=DB.battles.findIndex(b=>b.id===id);
+    if(idx>-1) DB.battles.splice(idx,1);
+    showNotif('Battle supprimé','success');
+    renderAdminTab();
+  }
+}
+function adminDeleteInstru(id) {
+  if(confirm('Supprimer cette instru ?')) {
+    const idx=DB.instrus.findIndex(i=>i.id===id);
+    if(idx>-1) DB.instrus.splice(idx,1);
+    showNotif('Instru supprimée','success');
+    renderAdminTab();
+  }
+}
+
+// ================================
+// INIT
+// ================================
+(function init() {
+  const token=localStorage.getItem('gomde_token');
+  if(token) {
+    try {
+      const {id}=JSON.parse(token);
+      const u=DB.users.find(x=>x.id===id);
+      if(u) { login(u); return; }
+    } catch(e){}
+  }
+  document.getElementById('authScreen').style.display='flex';
+})();
+</script>
+</body>
+</html>
