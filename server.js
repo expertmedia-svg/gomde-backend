@@ -16,8 +16,24 @@ const allowedOrigins = (process.env.FRONTEND_URL || '')
   .map((origin) => origin.trim())
   .filter(Boolean);
 
+const localhostOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/i;
+
+const toSafeHeaderFilename = (filePath) => {
+  const originalName = path.basename(filePath);
+
+  return originalName
+    .normalize('NFKD')
+    .replace(/[^\x20-\x7E]/g, '')
+    .replace(/["\\;]/g, '_')
+    .trim() || 'file';
+};
+
 const isAllowedOrigin = (origin) => {
   if (!origin) {
+    return true;
+  }
+
+  if (localhostOriginPattern.test(origin)) {
     return true;
   }
 
@@ -62,7 +78,7 @@ app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(morgan('dev'));
 app.use('/uploads/instru', express.static(path.join(__dirname, 'uploads', 'instru'), {
   setHeaders: (res, filePath) => {
-    res.setHeader('Content-Disposition', `inline; filename="${path.basename(filePath)}"`);
+    res.setHeader('Content-Disposition', `inline; filename="${toSafeHeaderFilename(filePath)}"`);
     res.setHeader('Cache-Control', 'public, max-age=3600');
   }
 }));
