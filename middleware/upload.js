@@ -1,6 +1,39 @@
 const multer = require('multer');
 const path = require('path');
 
+const AUDIO_EXTENSION_BY_MIME = {
+  'audio/aac': '.aac',
+  'audio/mp3': '.mp3',
+  'audio/mpeg': '.mp3',
+  'audio/mp4': '.m4a',
+  'audio/m4a': '.m4a',
+  'audio/ogg': '.ogg',
+  'audio/wav': '.wav',
+  'audio/wave': '.wav',
+  'audio/webm': '.webm',
+  'audio/x-m4a': '.m4a',
+  'audio/x-wav': '.wav',
+  'audio/x-wave': '.wav'
+};
+
+const AUDIO_ALLOWED_EXTENSIONS = new Set([
+  '.aac',
+  '.m4a',
+  '.mp3',
+  '.ogg',
+  '.wav',
+  '.webm'
+]);
+
+const resolveAudioExtension = (file) => {
+  const originalExtension = path.extname(file.originalname || '').toLowerCase();
+  if (AUDIO_ALLOWED_EXTENSIONS.has(originalExtension)) {
+    return originalExtension;
+  }
+
+  return AUDIO_EXTENSION_BY_MIME[file.mimetype] || '.bin';
+};
+
 const videoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, 'uploads/videos/');
@@ -17,7 +50,7 @@ const audioStorage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + '.webm');
+    cb(null, uniqueSuffix + resolveAudioExtension(file));
   }
 });
 
@@ -31,8 +64,24 @@ const videoFilter = (req, file, cb) => {
 };
 
 const audioFilter = (req, file, cb) => {
-  const allowedTypes = ['audio/webm', 'audio/mp3', 'audio/wav'];
-  if (allowedTypes.includes(file.mimetype)) {
+  const extension = path.extname(file.originalname || '').toLowerCase();
+  const allowedTypes = new Set([
+    'application/octet-stream',
+    'audio/aac',
+    'audio/mp3',
+    'audio/mpeg',
+    'audio/mp4',
+    'audio/m4a',
+    'audio/ogg',
+    'audio/wav',
+    'audio/wave',
+    'audio/webm',
+    'audio/x-m4a',
+    'audio/x-wav',
+    'audio/x-wave'
+  ]);
+
+  if (allowedTypes.has(file.mimetype) || AUDIO_ALLOWED_EXTENSIONS.has(extension)) {
     cb(null, true);
   } else {
     cb(new Error('Invalid audio type'), false);
