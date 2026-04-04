@@ -7,6 +7,11 @@ const videoSchema = new mongoose.Schema({
     trim: true,
     maxlength: 100
   },
+  type: {
+    type: String,
+    enum: ['freestyle', 'battle'],
+    default: 'freestyle'
+  },
   description: String,
   user: {
     type: mongoose.Schema.Types.ObjectId,

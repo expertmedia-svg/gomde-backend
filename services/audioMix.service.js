@@ -51,6 +51,7 @@ exports.renderStudioMix = async ({
   rawVoicePath,
   instrumentalUrl,
   channelLevels = {},
+  channelPan = {},
   effects = {},
   timeline = {}
 }) => {
@@ -72,12 +73,19 @@ exports.renderStudioMix = async ({
   const beatLevel = clamp(channelLevels.beat ?? 76, 0, 200) / 100;
   const reverbAmount = clamp(effects.reverb ?? 0, 0, 1);
   const autotuneAmount = clamp(effects.autotune ?? 0, 0, 1);
+  const compressionAmount = clamp(effects.compression ?? 0.35, 0, 1);
+  const lowEq = clamp(effects.lowEq ?? 0, -1, 1) * 10;
+  const midEq = clamp(effects.midEq ?? 0, -1, 1) * 10;
+  const highEq = clamp(effects.highEq ?? 0, -1, 1) * 10;
+  const vocalPan = clamp(channelPan.leadVox ?? 0, -100, 100) / 100;
+  const beatPan = clamp(channelPan.beat ?? 0, -100, 100) / 100;
   const voiceOffsetMs = Math.round(clamp(timeline.voiceOffset ?? 0, 0, 12000));
   const trimStartSeconds = clamp(timeline.trimStart ?? 0, 0, 30000) / 1000;
   const trimEndSeconds = clamp(timeline.trimEnd ?? 0, 0, 30000) / 1000;
 
   const vocalFilters = [
     'aresample=44100',
+    'aformat=channel_layouts=stereo',
     'highpass=f=120'
   ];
 
@@ -94,7 +102,25 @@ exports.renderStudioMix = async ({
   }
 
   vocalFilters.push(`volume=${vocalLevel.toFixed(2)}`);
-  vocalFilters.push('acompressor=threshold=0.12:ratio=2.5:attack=20:release=180');
+  if (Math.abs(lowEq) > 0.05) {
+    vocalFilters.push(`equalizer=f=120:t=q:w=1.1:g=${lowEq.toFixed(2)}`);
+  }
+  if (Math.abs(midEq) > 0.05) {
+    vocalFilters.push(`equalizer=f=1400:t=q:w=1.0:g=${midEq.toFixed(2)}`);
+  }
+  if (Math.abs(highEq) > 0.05) {
+    vocalFilters.push(`equalizer=f=5200:t=q:w=0.8:g=${highEq.toFixed(2)}`);
+  }
+
+  if (Math.abs(vocalPan) > 0.01) {
+    vocalFilters.push(`stereotools=balance_in=${vocalPan.toFixed(2)}`);
+  }
+
+  const compressionThreshold = Math.min(0.18, Math.max(0.05, 0.18 - compressionAmount * 0.1));
+  const compressionRatio = (1.6 + compressionAmount * 3.6).toFixed(2);
+  vocalFilters.push(
+    `acompressor=threshold=${compressionThreshold.toFixed(2)}:ratio=${compressionRatio}:attack=20:release=180`
+  );
 
   if (autotuneAmount > 0.05) {
     const delay = (45 + autotuneAmount * 20).toFixed(1);
@@ -117,7 +143,15 @@ exports.renderStudioMix = async ({
 
   if (instrumentalPath && fs.existsSync(instrumentalPath)) {
     ffmpegArguments.push('-i', instrumentalPath);
-    filterComplex = `${filterComplex};[1:a]aresample=44100,volume=${beatLevel.toFixed(2)}[beat];[beat][vox]amix=inputs=2:normalize=0:dropout_transition=0,alimiter=limit=0.95[out]`;
+    const beatFilters = [
+      'aresample=44100',
+      'aformat=channel_layouts=stereo',
+      `volume=${beatLevel.toFixed(2)}`,
+    ];
+    if (Math.abs(beatPan) > 0.01) {
+      beatFilters.push(`stereotools=balance_in=${beatPan.toFixed(2)}`);
+    }
+    filterComplex = `${filterComplex};[1:a]${beatFilters.join(',')}[beat];[beat][vox]amix=inputs=2:normalize=0:dropout_transition=0,alimiter=limit=0.95[out]`;
   } else {
     filterComplex = `${filterComplex};[vox]alimiter=limit=0.95[out]`;
   }

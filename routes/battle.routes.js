@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const { protect, artist } = require('../middleware/auth');
+const { protect } = require('../middleware/auth');
 const { uploadVideo } = require('../middleware/upload');
 const {
   createBattle,
@@ -12,7 +12,7 @@ const {
   likeBattle
 } = require('../controllers/battle.controller');
 
-router.post('/', protect, artist, createBattle);
+router.post('/', protect, createBattle);
 router.get('/', getBattles);
 router.get('/:id', getBattleById);
 router.post('/:id/join', protect, joinBattle);

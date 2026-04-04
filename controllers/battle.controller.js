@@ -5,15 +5,25 @@ const Video = require('../models/video');
 exports.createBattle = async (req, res) => {
   try {
     const { title, description, rules, endDate } = req.body;
+    const normalizedTitle = title?.trim() || 'Battle studio';
+    const normalizedDescription = description?.trim() || undefined;
+    const normalizedRules = {
+      maxDuration: Number(rules?.maxDuration) > 0 ? Number(rules.maxDuration) : 60,
+      allowInstrumentals: rules?.allowInstrumentals !== false,
+      requiredOriginal: rules?.requiredOriginal === true
+    };
+    const normalizedEndDate = endDate ? new Date(endDate) : null;
     
     const battle = await Battle.create({
-      title,
-      description,
+      title: normalizedTitle,
+      description: normalizedDescription,
       creator: req.user._id,
       entries: [{ user: req.user._id }],
       prize: 0,
-      rules: rules || {},
-      endDate: endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+      rules: normalizedRules,
+      endDate: normalizedEndDate && !Number.isNaN(normalizedEndDate.getTime())
+        ? normalizedEndDate
+        : new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
     });
     
     res.status(201).json(battle);

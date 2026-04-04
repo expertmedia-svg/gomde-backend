@@ -134,14 +134,27 @@ exports.saveAudioRecording = async (req, res) => {
       effects,
       channelLevels,
       channelPan,
+      recordingSetup,
       shareToCommunity,
       sourceRecordingId,
       timeline,
       renderMix
     } = req.body;
-    const parsedEffects = safeJsonParse(effects, { reverb: 0, autotune: 0 });
+    const parsedEffects = safeJsonParse(effects, {
+      reverb: 0,
+      autotune: 0,
+      compression: 0.35,
+      lowEq: 0,
+      midEq: 0,
+      highEq: 0
+    });
     const parsedLevels = safeJsonParse(channelLevels, { leadVox: 82, double: 64, beat: 76, fxBus: 48 });
     const parsedPan = safeJsonParse(channelPan, { leadVox: 0, double: -20, beat: 0, fxBus: 16 });
+    const parsedSetup = safeJsonParse(recordingSetup, {
+      sampleRate: 44100,
+      channels: 1,
+      stereoEnabled: false
+    });
     const parsedTimeline = safeJsonParse(timeline, {
       voiceOffset: 0,
       trimStart: 0,
@@ -187,6 +200,7 @@ exports.saveAudioRecording = async (req, res) => {
         rawVoicePath: path.join(__dirname, '..', 'uploads', 'audio', rawVoiceFile.filename),
         instrumentalUrl: selectedInstrumental?.audioUrl,
         channelLevels: parsedLevels,
+        channelPan: parsedPan,
         effects: parsedEffects,
         timeline: sanitizedTimeline
       });
@@ -217,6 +231,7 @@ exports.saveAudioRecording = async (req, res) => {
         effects: parsedEffects,
         channelLevels: parsedLevels,
         channelPan: parsedPan,
+        recordingSetup: parsedSetup,
         instrumentalId: selectedInstrumental?._id,
         instrumentalTitle: selectedInstrumental?.title,
         instrumentalUrl: selectedInstrumental?.audioUrl,

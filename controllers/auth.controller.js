@@ -16,6 +16,7 @@ exports.register = async (req, res) => {
     }
 
     const { username, email, password, role, city, neighborhood } = req.body;
+    const normalizedRole = role === 'admin' ? 'admin' : 'user';
 
     const userExists = await User.findOne({ $or: [{ email }, { username }] });
     if (userExists) {
@@ -26,7 +27,7 @@ exports.register = async (req, res) => {
       username,
       email,
       password,
-      role: role || 'user',
+      role: normalizedRole,
       profile: {
         city,
         neighborhood,

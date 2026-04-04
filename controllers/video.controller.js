@@ -9,10 +9,14 @@ exports.uploadVideo = async (req, res) => {
       return res.status(400).json({ message: 'No video file uploaded' });
     }
     
-    const { title, description, tags } = req.body;
+    const { title, description, tags, type } = req.body;
+    const normalizedType = type === 'battle' ? 'battle' : 'freestyle';
+    const normalizedTitle = title?.trim() ||
+      (normalizedType === 'battle' ? 'Battle instant' : 'Freestyle instant');
     
     const video = await Video.create({
-      title,
+      title: normalizedTitle,
+      type: normalizedType,
       description,
       user: req.user._id,
       videoUrl: `/uploads/videos/${req.file.filename}`,

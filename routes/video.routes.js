@@ -40,6 +40,7 @@ const upload = multer({
 });
 
 router.post('/upload', protect, upload.single('video'), uploadVideo);
+router.post('/create', protect, upload.single('video'), uploadVideo);
 router.get('/', getVideos);
 router.get('/:id', getVideoById);
 router.post('/:id/view', incrementVideoView);
