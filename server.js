@@ -9,7 +9,7 @@ const http = require('http');
 const { Server } = require('socket.io');
 const path = require('path');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
 
 const allowedOrigins = (process.env.FRONTEND_URL || '')
   .split(',')
