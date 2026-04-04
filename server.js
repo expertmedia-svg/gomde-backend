@@ -60,6 +60,7 @@ const server = http.createServer(app);
 const io = new Server(server, {
   cors: corsOptions
 });
+app.set('io', io);
 
 // Middleware
 app.use(helmet({

@@ -250,6 +250,32 @@ exports.vote = async (req, res) => {
     });
     
     await battle.save();
+
+    const io = req.app.get('io');
+    if (io) {
+      const voteBreakdown = battle.entries.map((entry) => {
+        const participantId = entry.user?.toString();
+        const count = participantId
+          ? battle.votes.filter((voteItem) => voteItem.votedFor?.toString() === participantId).length
+          : 0;
+
+        return {
+          userId: participantId,
+          votes: count,
+        };
+      });
+
+      io.to(battleId).emit('vote-updated', {
+        battleId,
+        totalVotes: battle.votes.length,
+        votedFor: normalizedVotedFor,
+        voter: {
+          userId: req.user._id.toString(),
+          username: req.user.username,
+        },
+        voteBreakdown,
+      });
+    }
     
     // Auto-calculate winner if all votes are in (simplified)
     if (battle.votes.length >= 10) {
