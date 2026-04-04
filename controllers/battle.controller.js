@@ -23,6 +23,19 @@ const readBattleId = (req, res) => {
   return battleId;
 };
 
+const handleBattleError = (res, error) => {
+  if (error?.name === 'CastError' && error?.path === '_id') {
+    return res.status(400).json({ message: 'Invalid battle id' });
+  }
+
+  if (error?.name === 'CastError' && error?.path === 'votedFor') {
+    return res.status(400).json({ message: 'Invalid votedFor user id' });
+  }
+
+  console.error(error);
+  return res.status(500).json({ message: 'Server error' });
+};
+
 exports.createBattle = async (req, res) => {
   try {
     const { title, description, rules, endDate } = req.body;
@@ -78,8 +91,7 @@ exports.getBattles = async (req, res) => {
       total
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    return handleBattleError(res, error);
   }
 };
 
@@ -103,8 +115,7 @@ exports.getBattleById = async (req, res) => {
     
     res.json(battle);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    return handleBattleError(res, error);
   }
 };
 
@@ -137,8 +148,7 @@ exports.joinBattle = async (req, res) => {
     
     res.json(battle);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    return handleBattleError(res, error);
   }
 };
 
@@ -193,8 +203,7 @@ exports.submitEntry = async (req, res) => {
     
     res.json(battle);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    return handleBattleError(res, error);
   }
 };
 
@@ -249,8 +258,7 @@ exports.vote = async (req, res) => {
     
     res.json(battle);
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    return handleBattleError(res, error);
   }
 };
 
