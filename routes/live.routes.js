@@ -1,13 +1,32 @@
 const express = require('express');
+const mongoose = require('mongoose');
 const { AccessToken } = require('livekit-server-sdk');
 const { protect } = require('../middleware/auth');
+const Battle = require('../models/battle');
 
 const router = express.Router();
 
 router.get('/token/:battleId', protect, async (req, res) => {
   try {
-    const { battleId } = req.params;
+    const battleId = typeof req.params.battleId === 'string'
+      ? req.params.battleId.trim()
+      : '';
     const { role = 'spectator' } = req.query;
+
+    if (!mongoose.isValidObjectId(battleId)) {
+      return res.status(400).json({
+        enabled: false,
+        message: 'Invalid battle id'
+      });
+    }
+
+    const battleExists = await Battle.exists({ _id: battleId });
+    if (!battleExists) {
+      return res.status(404).json({
+        enabled: false,
+        message: 'Battle not found'
+      });
+    }
 
     if (!process.env.LIVEKIT_URL || !process.env.LIVEKIT_API_KEY || !process.env.LIVEKIT_API_SECRET) {
       return res.status(503).json({

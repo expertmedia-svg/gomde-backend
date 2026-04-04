@@ -1,6 +1,27 @@
+const mongoose = require('mongoose');
 const Battle = require('../models/battle');
 const User = require('../models/user');
 const Video = require('../models/video');
+
+const normalizeObjectId = (value) => {
+  if (typeof value !== 'string') {
+    return null;
+  }
+
+  const trimmed = value.trim();
+  return mongoose.isValidObjectId(trimmed) ? trimmed : null;
+};
+
+const readBattleId = (req, res) => {
+  const battleId = normalizeObjectId(req.params.id);
+
+  if (!battleId) {
+    res.status(400).json({ message: 'Invalid battle id' });
+    return null;
+  }
+
+  return battleId;
+};
 
 exports.createBattle = async (req, res) => {
   try {
@@ -64,7 +85,12 @@ exports.getBattles = async (req, res) => {
 
 exports.getBattleById = async (req, res) => {
   try {
-    const battle = await Battle.findById(req.params.id)
+    const battleId = readBattleId(req, res);
+    if (!battleId) {
+      return;
+    }
+
+    const battle = await Battle.findById(battleId)
       .populate('creator', 'username profile.avatar stats.score')
       .populate('challenger', 'username profile.avatar stats.score')
       .populate('entries.user', 'username profile.avatar stats.score')
@@ -84,7 +110,12 @@ exports.getBattleById = async (req, res) => {
 
 exports.joinBattle = async (req, res) => {
   try {
-    const battle = await Battle.findById(req.params.id);
+    const battleId = readBattleId(req, res);
+    if (!battleId) {
+      return;
+    }
+
+    const battle = await Battle.findById(battleId);
     
     if (!battle) {
       return res.status(404).json({ message: 'Battle not found' });
@@ -114,7 +145,12 @@ exports.joinBattle = async (req, res) => {
 exports.submitEntry = async (req, res) => {
   try {
     const { videoUrl, videoPublicId, thumbnailUrl } = req.body;
-    const battle = await Battle.findById(req.params.id);
+    const battleId = readBattleId(req, res);
+    if (!battleId) {
+      return;
+    }
+
+    const battle = await Battle.findById(battleId);
     
     if (!battle) {
       return res.status(404).json({ message: 'Battle not found' });
@@ -165,7 +201,17 @@ exports.submitEntry = async (req, res) => {
 exports.vote = async (req, res) => {
   try {
     const { votedFor } = req.body;
-    const battle = await Battle.findById(req.params.id);
+    const battleId = readBattleId(req, res);
+    if (!battleId) {
+      return;
+    }
+
+    const normalizedVotedFor = normalizeObjectId(votedFor);
+    if (!normalizedVotedFor) {
+      return res.status(400).json({ message: 'Invalid votedFor user id' });
+    }
+
+    const battle = await Battle.findById(battleId);
     
     if (!battle) {
       return res.status(404).json({ message: 'Battle not found' });
@@ -173,6 +219,14 @@ exports.vote = async (req, res) => {
     
     if (battle.status !== 'active') {
       return res.status(400).json({ message: 'Battle is not active' });
+    }
+
+    const votedParticipant = battle.entries.some(
+      (entry) => entry.user && entry.user.toString() === normalizedVotedFor
+    );
+
+    if (!votedParticipant) {
+      return res.status(400).json({ message: 'Vote target is not part of this battle' });
     }
     
     const hasVoted = battle.votes.some(v => v.user.toString() === req.user._id.toString());
@@ -183,7 +237,7 @@ exports.vote = async (req, res) => {
     
     battle.votes.push({
       user: req.user._id,
-      votedFor
+      votedFor: normalizedVotedFor
     });
     
     await battle.save();
@@ -202,7 +256,12 @@ exports.vote = async (req, res) => {
 
 exports.likeBattle = async (req, res) => {
   try {
-    const battle = await Battle.findById(req.params.id);
+    const battleId = readBattleId(req, res);
+    if (!battleId) {
+      return;
+    }
+
+    const battle = await Battle.findById(battleId);
     
     if (!battle) {
       return res.status(404).json({ message: 'Battle not found' });
