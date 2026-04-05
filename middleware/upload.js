@@ -40,7 +40,8 @@ const videoStorage = multer.diskStorage({
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
+    const extension = path.extname(file.originalname || '').toLowerCase() || '.mp4';
+    cb(null, uniqueSuffix + extension);
   }
 });
 
@@ -55,8 +56,16 @@ const audioStorage = multer.diskStorage({
 });
 
 const videoFilter = (req, file, cb) => {
-  const allowedTypes = ['video/mp4', 'video/mpeg', 'video/quicktime'];
-  if (allowedTypes.includes(file.mimetype)) {
+  const allowedTypes = new Set([
+    'video/mp4',
+    'video/mpeg',
+    'video/quicktime',
+    'video/3gpp',
+    'video/3gpp2',
+    'video/webm',
+    'video/x-matroska'
+  ]);
+  if (allowedTypes.has(file.mimetype)) {
     cb(null, true);
   } else {
     cb(new Error('Invalid file type'), false);
