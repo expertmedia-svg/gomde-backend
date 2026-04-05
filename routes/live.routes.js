@@ -20,11 +20,18 @@ router.get('/token/:battleId', protect, async (req, res) => {
       });
     }
 
-    const battleExists = await Battle.exists({ _id: battleId });
-    if (!battleExists) {
+    const battle = await Battle.findById(battleId).select('_id status startDate');
+    if (!battle) {
       return res.status(404).json({
         enabled: false,
         message: 'Battle not found'
+      });
+    }
+
+    if (battle.status !== 'active') {
+      return res.status(409).json({
+        enabled: false,
+        message: 'Battle is not live yet'
       });
     }
 
