@@ -78,6 +78,15 @@ app.use('/uploads/instru', express.static(path.join(__dirname, 'uploads', 'instr
     res.setHeader('Cache-Control', 'public, max-age=3600');
   }
 }));
+app.use('/uploads/videos', express.static(path.join(__dirname, 'uploads', 'videos'), {
+  acceptRanges: true,
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    if (filePath.endsWith('.mp4')) {
+      res.setHeader('Content-Type', 'video/mp4');
+    }
+  }
+}));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Import routes
