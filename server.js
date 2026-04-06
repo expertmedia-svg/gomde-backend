@@ -105,6 +105,8 @@ app.use('/uploads/videos', express.static(path.join(__dirname, 'uploads', 'video
     res.setHeader('Cache-Control', 'public, max-age=3600');
     if (filePath.endsWith('.mp4')) {
       res.setHeader('Content-Type', 'video/mp4');
+    } else if (filePath.endsWith('.webm')) {
+      res.setHeader('Content-Type', 'video/webm');
     }
   },
   onError: (err, req, res) => {
