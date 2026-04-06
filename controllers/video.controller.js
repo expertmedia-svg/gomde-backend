@@ -3,6 +3,24 @@ const User = require('../models/user');
 const path = require('path');
 const { createVideoThumbnail, transcodeFeedVideo, safeUnlink } = require('../services/videoTranscode.service');
 
+// Helper to ensure all URLs are absolute
+const ensureAbsoluteUrls = (video, req) => {
+  if (!video) return video;
+  
+  const protocol = req.protocol || 'https';
+  const host = req.get('host') || 'gomde.yingr-ai.com';
+  const baseUrl = `${protocol}://${host}`;
+  
+  const enriched = { ...video };
+  if (enriched.videoUrl && !enriched.videoUrl.startsWith('http')) {
+    enriched.videoUrl = `${baseUrl}${enriched.videoUrl}`;
+  }
+  if (enriched.thumbnailUrl && !enriched.thumbnailUrl.startsWith('http')) {
+    enriched.thumbnailUrl = `${baseUrl}${enriched.thumbnailUrl}`;
+  }
+  return enriched;
+};
+
 exports.uploadVideo = async (req, res) => {
   const createdFiles = [];
 
@@ -68,14 +86,19 @@ exports.uploadVideo = async (req, res) => {
       };
     }
     
+    // Construct absolute URLs for files
+    const protocol = req.protocol || 'https';
+    const host = req.get('host') || 'gomde.yingr-ai.com';
+    const baseUrl = `${protocol}://${host}`;
+    
     const video = await Video.create({
       title: normalizedTitle,
       type: normalizedType,
       description,
       user: req.user._id,
-      videoUrl: `/uploads/videos/${asset.videoFilename}`,
+      videoUrl: `${baseUrl}/uploads/videos/${asset.videoFilename}`,
       videoPublicId: asset.videoFilename,
-      thumbnailUrl: asset.thumbnailFilename ? `/uploads/thumbnails/${asset.thumbnailFilename}` : '',
+      thumbnailUrl: asset.thumbnailFilename ? `${baseUrl}/uploads/thumbnails/${asset.thumbnailFilename}` : '',
       tags: tags ? tags.split(',') : []
     });
 
@@ -160,13 +183,15 @@ exports.getVideoById = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id)
       .populate('user', 'username profile.avatar stats.score')
-      .populate('comments.user', 'username profile.avatar');
+      .populate('comments.user', 'username profile.avatar')
+      .lean();
     
     if (!video) {
       return res.status(404).json({ message: 'Video not found' });
     }
 
-    res.json(video);
+    const enrichedVideo = ensureAbsoluteUrls(video, req);
+    res.json(enrichedVideo);
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

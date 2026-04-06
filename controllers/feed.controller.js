@@ -65,8 +65,23 @@ exports.getSmartFeed = async (req, res) => {
       .limit(3)
       .lean();
     
+    // Ensure all video URLs are absolute
+    const protocol = req.protocol || 'https';
+    const host = req.get('host') || 'gomde.yingr-ai.com';
+    const baseUrl = `${protocol}://${host}`;
+    
+    const enrichedVideos = paginatedVideos.map(video => ({
+      ...video,
+      videoUrl: video.videoUrl.startsWith('http') 
+        ? video.videoUrl 
+        : `${baseUrl}${video.videoUrl}`,
+      thumbnailUrl: video.thumbnailUrl && !video.thumbnailUrl.startsWith('http')
+        ? `${baseUrl}${video.thumbnailUrl}`
+        : video.thumbnailUrl
+    }));
+    
     res.json({
-      videos: paginatedVideos,
+      videos: enrichedVideos,
       battles,
       currentPage: page,
       hasMore: start + limit < scoredVideos.length
