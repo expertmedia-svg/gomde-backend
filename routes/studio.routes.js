@@ -1,5 +1,7 @@
 const express = require('express');
 const router = express.Router();
+const path = require('path');
+const fs = require('fs');
 const { protect, admin } = require('../middleware/auth');
 const multer = require('multer');
 const {
@@ -11,9 +13,15 @@ const {
   publishRecording
 } = require('../controllers/studio.controller');
 
+// Ensure upload directory exists
+const audioUploadDir = path.join(__dirname, '..', 'uploads', 'audio');
+if (!fs.existsSync(audioUploadDir)) {
+  fs.mkdirSync(audioUploadDir, { recursive: true });
+}
+
 const audioStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/audio/');
+    cb(null, audioUploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);

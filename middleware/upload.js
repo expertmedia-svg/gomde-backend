@@ -1,5 +1,22 @@
 const multer = require('multer');
 const path = require('path');
+const fs = require('fs');
+
+// Ensure upload directories exist
+const ensureUploadDirs = () => {
+  const videoDir = path.join(__dirname, '..', 'uploads', 'videos');
+  const audioDir = path.join(__dirname, '..', 'uploads', 'audio');
+  const thumbDir = path.join(__dirname, '..', 'uploads', 'thumbnails');
+  
+  [videoDir, audioDir, thumbDir].forEach(dir => {
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+      console.log(`Created upload directory: ${dir}`);
+    }
+  });
+};
+
+ensureUploadDirs();
 
 const AUDIO_EXTENSION_BY_MIME = {
   'audio/aac': '.aac',
@@ -36,7 +53,8 @@ const resolveAudioExtension = (file) => {
 
 const videoStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/videos/');
+    const uploadDir = path.join(__dirname, '..', 'uploads', 'videos');
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -47,7 +65,8 @@ const videoStorage = multer.diskStorage({
 
 const audioStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/audio/');
+    const uploadDir = path.join(__dirname, '..', 'uploads', 'audio');
+    cb(null, uploadDir);
   },
   filename: (req, file, cb) => {
     const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
@@ -109,4 +128,31 @@ const uploadAudio = multer({
   limits: { fileSize: 50 * 1024 * 1024 }
 });
 
-module.exports = { uploadVideo, uploadAudio };
+// Middleware wrapper to log successful uploads
+const logUploadSuccess = (fieldName) => (req, res, next) => {
+  if (req.file) {
+    const uploadPath = path.join(req.file.destination, req.file.filename);
+    const fileSize = req.file.size;
+    const mimeType = req.file.mimetype;
+    console.log(`[Upload Success] Type: ${fieldName}, File: ${req.file.filename}, Size: ${fileSize} bytes, MIME: ${mimeType}, Path: ${uploadPath}`);
+    
+    // Verify file actually exists after multer write
+    setTimeout(() => {
+      if (fs.existsSync(uploadPath)) {
+        const stat = fs.statSync(uploadPath);
+        console.log(`[Upload Verified] File exists: ${uploadPath}, Actual size: ${stat.size} bytes`);
+      } else {
+        console.error(`[Upload Failed Verification] File not found after upload: ${uploadPath}`);
+      }
+    }, 100);
+  }
+  next();
+};
+
+// Enhanced exports with logging middleware
+module.exports = {
+  uploadVideo,
+  uploadAudio,
+  uploadVideoWithLogging: [uploadVideo.single('video'), logUploadSuccess('video')],
+  uploadAudioWithLogging: [uploadAudio.single('audio'), logUploadSuccess('audio')]
+};
