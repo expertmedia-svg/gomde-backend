@@ -67,7 +67,9 @@ const transcodeFeedVideo = async ({ inputPath, outputBasename }) => {
     throw new Error('ffmpeg-static is not available');
   }
 
-  const outputPath = path.join(path.dirname(inputPath), `${outputBasename}.mp4`);
+  // Generate WebM (VP8) instead of MP4 (H.264) for better mobile compatibility
+  // VP8 is software-decoded on all Android devices, avoiding hardware codec issues
+  const outputPath = path.join(path.dirname(inputPath), `${outputBasename}.webm`);
   const thumbnailPath = path.join(
     path.dirname(path.dirname(inputPath)),
     'thumbnails',
@@ -77,6 +79,11 @@ const transcodeFeedVideo = async ({ inputPath, outputBasename }) => {
   await ensureDirectory(outputPath);
   await ensureDirectory(thumbnailPath);
 
+  // Transcode to WebM/VP8 format
+  // VP8 is the best choice for mobile hardware compatibility:
+  // - No hardware decoder dependency (all Android devices use software decode)
+  // - Lower CPU requirements than VP9
+  // - Universal browser and Android support
   await runFfmpeg([
     '-y',
     '-i',
@@ -84,33 +91,27 @@ const transcodeFeedVideo = async ({ inputPath, outputBasename }) => {
     '-vf',
     "scale='min(480,iw)':-2,format=yuv420p",
     '-c:v',
-    'libx264',
-    '-preset',
-    'fast',
-    '-profile:v',
-    'baseline',
-    '-level',
-    '3.0',
+    'libvpx',          // VP8 video codec
     '-b:v',
-    '1500k',
+    '1500k',           // Target bitrate
     '-maxrate',
-    '2000k',
-    '-bufsize',
-    '3000k',
-    '-movflags',
-    '+faststart',
-    '-pix_fmt',
-    'yuv420p',
+    '2000k',           // Maximum bitrate
+    '-minrate',
+    '1000k',           // Minimum bitrate
+    '-crf',
+    '32',              // Quality (higher = lower quality, 1-63)
+    '-deadline',
+    'good',            // Encoding speed (best, good, realtime)
     '-g',
-    '30',
+    '120',             // Keyframe interval (for VP8)
     '-c:a',
-    'aac',
+    'libvorbis',       // Vorbis audio codec
     '-b:a',
-    '96k',
+    '96k',             // Audio bitrate
     '-ar',
-    '22050',
+    '22050',           // Audio sample rate
     '-ac',
-    '2',
+    '2',               // Audio channels
     outputPath,
   ]);
 
