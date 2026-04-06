@@ -1,6 +1,19 @@
 const Video = require('../models/video');
 const Battle = require('../models/battle');
 
+// Helper to get correct protocol (handles nginx reverse proxy)
+const getRequestProtocol = (req) => {
+  // Use x-forwarded-proto header from reverse proxy (nginx sets this)
+  const forwardedProto = req.get('x-forwarded-proto');
+  if (forwardedProto) return forwardedProto;
+  
+  // Fallback: force https in production, req.protocol for local dev
+  if (process.env.NODE_ENV === 'production') {
+    return 'https';
+  }
+  return req.protocol || 'https';
+};
+
 exports.getSmartFeed = async (req, res) => {
   try {
     const { page = 1, limit = 10 } = req.query;
@@ -66,7 +79,7 @@ exports.getSmartFeed = async (req, res) => {
       .lean();
     
     // Ensure all video URLs are absolute
-    const protocol = req.protocol || 'https';
+    const protocol = getRequestProtocol(req);
     const host = req.get('host') || 'gomde.yingr-ai.com';
     const baseUrl = `${protocol}://${host}`;
     

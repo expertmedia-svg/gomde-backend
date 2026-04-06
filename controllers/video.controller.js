@@ -3,11 +3,24 @@ const User = require('../models/user');
 const path = require('path');
 const { createVideoThumbnail, transcodeFeedVideo, safeUnlink } = require('../services/videoTranscode.service');
 
+// Helper to get correct protocol (handles nginx reverse proxy)
+const getRequestProtocol = (req) => {
+  // Use x-forwarded-proto header from reverse proxy (nginx/nginx set this)
+  const forwardedProto = req.get('x-forwarded-proto');
+  if (forwardedProto) return forwardedProto;
+  
+  // Fallback: force https in production, req.protocol for local dev
+  if (process.env.NODE_ENV === 'production') {
+    return 'https';
+  }
+  return req.protocol || 'https';
+};
+
 // Helper to ensure all URLs are absolute
 const ensureAbsoluteUrls = (video, req) => {
   if (!video) return video;
   
-  const protocol = req.protocol || 'https';
+  const protocol = getRequestProtocol(req);
   const host = req.get('host') || 'gomde.yingr-ai.com';
   const baseUrl = `${protocol}://${host}`;
   
@@ -87,7 +100,7 @@ exports.uploadVideo = async (req, res) => {
     }
     
     // Construct absolute URLs for files
-    const protocol = req.protocol || 'https';
+    const protocol = getRequestProtocol(req);
     const host = req.get('host') || 'gomde.yingr-ai.com';
     const baseUrl = `${protocol}://${host}`;
     
