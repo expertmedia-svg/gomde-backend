@@ -79,39 +79,39 @@ const transcodeFeedVideo = async ({ inputPath, outputBasename }) => {
   await ensureDirectory(outputPath);
   await ensureDirectory(thumbnailPath);
 
-  // Transcode to WebM/VP8 format
-  // VP8 is the best choice for mobile hardware compatibility:
-  // - No hardware decoder dependency (all Android devices use software decode)
-  // - Lower CPU requirements than VP9
-  // - Universal browser and Android support
+  // Transcode to ultra-minimal WebM/VP8 for broken MediaTek hardware decoders
+  // This device can't handle normal buffer allocation, so we reduce everything to minimum
+  // Resolution: 320p (very low)
+  // Bitrate: 500k (very low)
+  // Keyframes: every frame (less buffering needed)
   await runFfmpeg([
     '-y',
     '-i',
     inputPath,
     '-vf',
-    "scale='min(480,iw)':-2,format=yuv420p",
+    "scale='min(320,iw)':-2,format=yuv420p",  // Ultra low res
     '-c:v',
     'libvpx',          // VP8 video codec
     '-b:v',
-    '1500k',           // Target bitrate
+    '500k',            // Ultra low bitrate
     '-maxrate',
-    '2000k',           // Maximum bitrate
+    '750k',            // Low max rate
     '-minrate',
-    '1000k',           // Minimum bitrate
+    '300k',            // Low min rate
     '-crf',
-    '32',              // Quality (higher = lower quality, 1-63)
+    '40',              // Lower quality (more compression)
     '-deadline',
-    'good',            // Encoding speed (best, good, realtime)
+    'realtime',        // Fastest encoding (less complex)
     '-g',
-    '120',             // Keyframe interval (for VP8)
+    '1',               // Keyframe every frame (no buffering)
     '-c:a',
     'libvorbis',       // Vorbis audio codec
     '-b:a',
-    '96k',             // Audio bitrate
+    '64k',             // Lower audio bitrate
     '-ar',
-    '22050',           // Audio sample rate
+    '16000',           // Very low sample rate
     '-ac',
-    '2',               // Audio channels
+    '1',               // Mono
     outputPath,
   ]);
 
