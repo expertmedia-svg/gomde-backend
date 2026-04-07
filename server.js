@@ -160,6 +160,21 @@ app.use('/uploads/covers', express.static(path.join(__dirname, 'uploads', 'cover
   }
 }));
 
+// Serve public assets (logos, default images)
+app.use('/public/assets', express.static(path.join(__dirname, 'public', 'assets'), {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+    const ext = filePath.toLowerCase();
+    if (ext.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (ext.endsWith('.jpg') || ext.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (ext.endsWith('.webp')) {
+      res.setHeader('Content-Type', 'image/webp');
+    }
+  }
+}));
+
 // Middleware pour capturer les 404 sur les vidéos (video non trouvée)
 app.use((req, res, next) => {
   if (req.path.startsWith('/uploads/videos/') && res.statusCode === 404) {

@@ -152,13 +152,13 @@ exports.getGomdezik = async (req, res) => {
     const userLocation = req.user?.profile?.city;
     
     // Get shared recordings (shareToCommunity = true, instrumental = false)
+    // Note: coverImageUrl is optional - include recordings even without covers
     const query = {
       shareToCommunity: true,
-      instrumental: false,
-      isPublic: true
+      instrumental: false
     };
     
-    // Add location filter if user has a location
+    // Add location filter if user has a location (optional)
     if (userLocation) {
       query['user.profile.city'] = userLocation;
     }
@@ -167,18 +167,67 @@ exports.getGomdezik = async (req, res) => {
       .populate('user', 'username profile.avatar profile.city')
       .sort({ createdAt: -1 })
       .skip((page - 1) * limit)
-      .limit(parseInt(limit));
+      .limit(parseInt(limit))
+      .lean();
+    
+    console.log(`[Gomdé Zik] Found ${recordings.length} recordings for user in ${userLocation || 'any location'}`);
     
     const total = await AudioTrack.countDocuments(query);
     
+    // Ensure all URLs are absolute
+    const protocol = getRequestProtocol(req);
+    const host = req.get('host') || 'gomde.yingr-ai.com';
+    const baseUrl = `${protocol}://${host}`;
+    
+    // Transform AudioTracks to Video-like format for mobile compatibility
+    const videos = recordings.map(recording => {
+      const videoUrl = recording.audioUrl 
+        ? (recording.audioUrl.startsWith('http') 
+            ? recording.audioUrl 
+            : `${baseUrl}${recording.audioUrl}`)
+        : '';
+      
+      // Use cover if available, otherwise use GOMDE logo as default
+      const thumbnailUrl = recording.coverImageUrl
+        ? (recording.coverImageUrl.startsWith('http')
+            ? recording.coverImageUrl
+            : `${baseUrl}${recording.coverImageUrl}`)
+        : `${baseUrl}/public/assets/gomde-logo.png`;
+      
+      return {
+        _id: recording._id,
+        id: recording._id.toString(),
+        title: recording.title || 'Sans titre',
+        description: `${recording.title || 'Enregistrement'} - ${recording.artist || recording.user?.username || 'Artiste'}`,
+        videoUrl,
+        thumbnailUrl,
+        user: {
+          _id: recording.user?._id,
+          username: recording.user?.username || 'Artiste',
+          avatar: recording.user?.profile?.avatar,
+          city: recording.user?.profile?.city
+        },
+        likes: recording.likes?.length || 0,
+        comments: [],
+        shares: 0,
+        views: recording.plays || 0,
+        type: 'audio',
+        createdAt: recording.createdAt,
+        isAudio: true,
+        sourceType: 'gomdezik'
+      };
+    });
+    
+    console.log(`[Gomdé Zik] Returning ${videos.length} transformed videos`);
+    
     res.json({
-      recordings,
-      currentPage: page,
-      totalPages: Math.ceil(total / limit),
-      hasMore: page * limit < total
+      videos,
+      battles: [],
+      currentPage: parseInt(page),
+      hasMore: (page - 1) * limit + limit < total
     });
   } catch (error) {
-    console.error(error);
+    console.error('[Gomdé Zik] Error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 };
