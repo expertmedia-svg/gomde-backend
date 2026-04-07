@@ -151,17 +151,13 @@ exports.getGomdezik = async (req, res) => {
     const { page = 1, limit = 12 } = req.query;
     const userLocation = req.user?.profile?.city;
     
-    // Get shared recordings (shareToCommunity = true, instrumental = false)
-    // Note: coverImageUrl is optional - include recordings even without covers
+    // Get all shared recordings (shareToCommunity = true, instrumental = false)
+    // Note: user.profile.city cannot be queried here because 'user' is a ref (ObjectId),
+    // city is only available after populate. Filter by location post-populate if needed.
     const query = {
       shareToCommunity: true,
       instrumental: false
     };
-    
-    // Add location filter if user has a location (optional)
-    if (userLocation) {
-      query['user.profile.city'] = userLocation;
-    }
     
     const recordings = await AudioTrack.find(query)
       .populate('user', 'username profile.avatar profile.city')
@@ -170,7 +166,7 @@ exports.getGomdezik = async (req, res) => {
       .limit(parseInt(limit))
       .lean();
     
-    console.log(`[Gomdé Zik] Found ${recordings.length} recordings for user in ${userLocation || 'any location'}`);
+    console.log(`[Gomdé Zik] Found ${recordings.length} recordings (all community)`);
     
     const total = await AudioTrack.countDocuments(query);
     
