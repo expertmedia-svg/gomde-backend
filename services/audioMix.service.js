@@ -2,6 +2,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 const ffmpegPath = require('ffmpeg-static');
+const { applyAutotune, isAutotuneAvailable } = require('./autotune');
 
 const AUDIO_DIRECTORY = path.join(__dirname, '..', 'uploads', 'audio');
 const UPLOADS_PREFIX = '/uploads/';
@@ -122,13 +123,8 @@ exports.renderStudioMix = async ({
     `acompressor=threshold=${compressionThreshold.toFixed(2)}:ratio=${compressionRatio}:attack=20:release=180`
   );
 
-  if (autotuneAmount > 0.05) {
-    const delay = (45 + autotuneAmount * 20).toFixed(1);
-    const decay = (0.20 + autotuneAmount * 0.20).toFixed(2);
-    const speed = (0.12 + autotuneAmount * 0.18).toFixed(2);
-    const depth = (1.8 + autotuneAmount * 3.2).toFixed(2);
-    vocalFilters.push(`chorus=0.5:0.9:${delay}:${decay}:${speed}:${depth}`);
-  }
+  // SKIP chorus effect for autotune – will apply librosa autotune after mix
+  // if (autotuneAmount > 0.05) { ... }
 
   if (reverbAmount > 0.05) {
     const firstDelay = 90 + Math.round(reverbAmount * 180);
@@ -169,6 +165,55 @@ exports.renderStudioMix = async ({
   );
 
   await runFfmpeg(ffmpegArguments);
+
+  // Apply autotune with librosa if enabled
+  if (autotuneAmount > 0.05) {
+    try {
+      const autotuneAvailable = await isAutotuneAvailable();
+      
+      if (autotuneAvailable) {
+        // Python output will be .wav, then convert to .m4a
+        const autotuneWavFileName = `autotune-wav-${Date.now()}-${Math.round(Math.random() * 1e9)}.wav`;
+        const autotuneWavPath = path.join(AUDIO_DIRECTORY, autotuneWavFileName);
+        const autotuneM4aPath = outputPath; // Reuse original m4a path
+        
+        // Get scale and root note from effects if provided (default to major, C)
+        const scaleName = effects.autotune_scale || 'major';
+        const rootNote = Math.round(effects.autotune_rootNote ?? 0);
+        
+        // Apply autotune (outputs WAV)
+        await applyAutotune({
+          inputPath: outputPath,
+          outputPath: autotuneWavPath,
+          strength: autotuneAmount,
+          scale: scaleName,
+          rootNote: rootNote,
+          wetMix: 1.0
+        });
+        
+        // Convert WAV to M4A
+        await runFfmpeg([
+          '-y',
+          '-i', autotuneWavPath,
+          '-c:a', 'aac',
+          '-b:a', '192k',
+          autotuneM4aPath
+        ]);
+        
+        // Clean up intermediate WAV file
+        if (fs.existsSync(autotuneWavPath)) {
+          fs.unlinkSync(autotuneWavPath);
+        }
+        
+        console.log(`[AUTOTUNE] Applied (strength=${autotuneAmount}, scale=${scaleName})`);
+      } else {
+        console.warn('[AUTOTUNE] Python/librosa not available, skipping autotune');
+      }
+    } catch (error) {
+      console.error('[AUTOTUNE] Error:', error.message);
+      console.warn('[AUTOTUNE] Continuing with mix without autotune');
+    }
+  }
 
   return {
     fileName: outputFileName,
