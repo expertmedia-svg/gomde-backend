@@ -114,6 +114,30 @@ app.use('/uploads/videos', express.static(path.join(__dirname, 'uploads', 'video
     res.status(500).json({ error: 'Failed to serve video' });
   }
 }));
+app.use('/uploads/audio', express.static(path.join(__dirname, 'uploads', 'audio'), {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cache-Control', 'public, max-age=3600');
+    const ext = filePath.toLowerCase();
+    if (ext.endsWith('.m4a')) {
+      res.setHeader('Content-Type', 'audio/mp4');
+    } else if (ext.endsWith('.mp3')) {
+      res.setHeader('Content-Type', 'audio/mpeg');
+    } else if (ext.endsWith('.wav')) {
+      res.setHeader('Content-Type', 'audio/wav');
+    } else if (ext.endsWith('.webm')) {
+      res.setHeader('Content-Type', 'audio/webm');
+    } else if (ext.endsWith('.aac')) {
+      res.setHeader('Content-Type', 'audio/aac');
+    } else if (ext.endsWith('.ogg')) {
+      res.setHeader('Content-Type', 'audio/ogg');
+    }
+    res.setHeader('Content-Disposition', `inline; filename="${toSafeHeaderFilename(filePath)}"`);
+  },
+  onError: (err, req, res) => {
+    console.error(`[Audio Serve Error] Path: ${req.path}, Error: ${err.message}`);
+    res.status(500).json({ error: 'Failed to serve audio' });
+  }
+}));
 
 // Middleware pour capturer les 404 sur les vidéos (video non trouvée)
 app.use((req, res, next) => {
