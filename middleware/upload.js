@@ -7,8 +7,9 @@ const ensureUploadDirs = () => {
   const videoDir = path.join(__dirname, '..', 'uploads', 'videos');
   const audioDir = path.join(__dirname, '..', 'uploads', 'audio');
   const thumbDir = path.join(__dirname, '..', 'uploads', 'thumbnails');
+  const coverDir = path.join(__dirname, '..', 'uploads', 'covers');
   
-  [videoDir, audioDir, thumbDir].forEach(dir => {
+  [videoDir, audioDir, thumbDir, coverDir].forEach(dir => {
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
       console.log(`Created upload directory: ${dir}`);
@@ -74,6 +75,18 @@ const audioStorage = multer.diskStorage({
   }
 });
 
+const imageStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const uploadDir = path.join(__dirname, '..', 'uploads', 'covers');
+    cb(null, uploadDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    const ext = path.extname(file.originalname || '').toLowerCase() || '.jpg';
+    cb(null, uniqueSuffix + ext);
+  }
+});
+
 const videoFilter = (req, file, cb) => {
   const allowedTypes = new Set([
     'video/mp4',
@@ -116,6 +129,21 @@ const audioFilter = (req, file, cb) => {
   }
 };
 
+const imageFilter = (req, file, cb) => {
+  const allowedTypes = new Set([
+    'image/jpeg',
+    'image/jpg',
+    'image/png',
+    'image/webp',
+    'image/gif'
+  ]);
+  if (allowedTypes.has(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid image type'), false);
+  }
+};
+
 const uploadVideo = multer({ 
   storage: videoStorage, 
   fileFilter: videoFilter,
@@ -126,6 +154,12 @@ const uploadAudio = multer({
   storage: audioStorage, 
   fileFilter: audioFilter,
   limits: { fileSize: 50 * 1024 * 1024 }
+});
+
+const uploadImage = multer({ 
+  storage: imageStorage, 
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 }
 });
 
 // Middleware wrapper to log successful uploads
@@ -153,6 +187,8 @@ const logUploadSuccess = (fieldName) => (req, res, next) => {
 module.exports = {
   uploadVideo,
   uploadAudio,
+  uploadImage,
   uploadVideoWithLogging: [uploadVideo.single('video'), logUploadSuccess('video')],
-  uploadAudioWithLogging: [uploadAudio.single('audio'), logUploadSuccess('audio')]
+  uploadAudioWithLogging: [uploadAudio.single('audio'), logUploadSuccess('audio')],
+  uploadImageWithLogging: [uploadImage.single('cover'), logUploadSuccess('cover')]
 };

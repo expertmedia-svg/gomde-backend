@@ -139,6 +139,27 @@ app.use('/uploads/audio', express.static(path.join(__dirname, 'uploads', 'audio'
   }
 }));
 
+app.use('/uploads/covers', express.static(path.join(__dirname, 'uploads', 'covers'), {
+  setHeaders: (res, filePath) => {
+    res.setHeader('Cache-Control', 'public, max-age=7200');
+    const ext = filePath.toLowerCase();
+    if (ext.endsWith('.jpg') || ext.endsWith('.jpeg')) {
+      res.setHeader('Content-Type', 'image/jpeg');
+    } else if (ext.endsWith('.png')) {
+      res.setHeader('Content-Type', 'image/png');
+    } else if (ext.endsWith('.webp')) {
+      res.setHeader('Content-Type', 'image/webp');
+    } else if (ext.endsWith('.gif')) {
+      res.setHeader('Content-Type', 'image/gif');
+    }
+    res.setHeader('Content-Disposition', `inline; filename="${toSafeHeaderFilename(filePath)}"`);
+  },
+  onError: (err, req, res) => {
+    console.error(`[Cover Serve Error] Path: ${req.path}, Error: ${err.message}`);
+    res.status(500).json({ error: 'Failed to serve cover' });
+  }
+}));
+
 // Middleware pour capturer les 404 sur les vidéos (video non trouvée)
 app.use((req, res, next) => {
   if (req.path.startsWith('/uploads/videos/') && res.statusCode === 404) {

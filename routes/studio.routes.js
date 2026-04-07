@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 const { protect, admin } = require('../middleware/auth');
 const multer = require('multer');
+const { uploadImageWithLogging } = require('../middleware/upload');
 const {
   getInstrumentals,
   saveAudioRecording,
@@ -47,6 +48,6 @@ router.get('/community-recordings', getCommunityRecordings);
 router.post('/instrumentals', protect, admin, audioUpload.single('audio'), uploadInstrumental);
 router.post('/record', protect, recordingUpload, saveAudioRecording);
 router.get('/my-recordings', protect, getUserRecordings);
-router.post('/recordings/:id/publish', protect, publishRecording);
+router.post('/recordings/:id/publish', protect, uploadImageWithLogging, publishRecording);
 
 module.exports = router;

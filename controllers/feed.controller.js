@@ -1,5 +1,6 @@
 const Video = require('../models/video');
 const Battle = require('../models/battle');
+const AudioTrack = require('../models/audiotrack');
 
 // Helper to get correct protocol (handles nginx reverse proxy)
 const getRequestProtocol = (req) => {
@@ -138,6 +139,44 @@ exports.getLocalContent = async (req, res) => {
       .limit(20);
     
     res.json(videos);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Get Gomdé Zik - Local shared audio recordings
+exports.getGomdezik = async (req, res) => {
+  try {
+    const { page = 1, limit = 12 } = req.query;
+    const userLocation = req.user?.profile?.city;
+    
+    // Get shared recordings (shareToCommunity = true, instrumental = false)
+    const query = {
+      shareToCommunity: true,
+      instrumental: false,
+      isPublic: true
+    };
+    
+    // Add location filter if user has a location
+    if (userLocation) {
+      query['user.profile.city'] = userLocation;
+    }
+    
+    const recordings = await AudioTrack.find(query)
+      .populate('user', 'username profile.avatar profile.city')
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit));
+    
+    const total = await AudioTrack.countDocuments(query);
+    
+    res.json({
+      recordings,
+      currentPage: page,
+      totalPages: Math.ceil(total / limit),
+      hasMore: page * limit < total
+    });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

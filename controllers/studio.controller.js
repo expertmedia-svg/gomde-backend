@@ -340,6 +340,11 @@ exports.publishRecording = async (req, res) => {
       return res.status(404).json({ message: 'Recording not found' });
     }
 
+    // Save cover image if provided
+    if (req.file) {
+      recording.coverImageUrl = `/uploads/covers/${req.file.filename}`;
+    }
+
     recording.shareToCommunity = true;
     recording.isPublic = true;
     await recording.save();
