@@ -67,9 +67,9 @@ const transcodeFeedVideo = async ({ inputPath, outputBasename }) => {
     throw new Error('ffmpeg-static is not available');
   }
 
-  // Generate WebM (VP8) instead of MP4 (H.264) for better mobile compatibility
-  // VP8 is software-decoded on all Android devices, avoiding hardware codec issues
-  const outputPath = path.join(path.dirname(inputPath), `${outputBasename}.webm`);
+  // MP4/H.264 : codec universel sur tous les appareils Android (y compris vieux MediaTek)
+  // VP8/WebM causait des crashs sur les décodeurs matériels MediaTek (erreur ENOMEM -22)
+  const outputPath = path.join(path.dirname(inputPath), `${outputBasename}.mp4`);
   const thumbnailPath = path.join(
     path.dirname(path.dirname(inputPath)),
     'thumbnails',
@@ -79,39 +79,32 @@ const transcodeFeedVideo = async ({ inputPath, outputBasename }) => {
   await ensureDirectory(outputPath);
   await ensureDirectory(thumbnailPath);
 
-  // Transcode to ultra-minimal WebM/VP8 for broken MediaTek hardware decoders
-  // This device can't handle normal buffer allocation, so we reduce everything to minimum
-  // Resolution: 320p (very low)
-  // Bitrate: 500k (very low)
-  // Keyframes: every frame (less buffering needed)
   await runFfmpeg([
     '-y',
     '-i',
     inputPath,
     '-vf',
-    "scale='min(320,iw)':-2,format=yuv420p",  // Ultra low res
+    "scale='min(480,iw)':-2,format=yuv420p",
     '-c:v',
-    'libvpx',          // VP8 video codec
-    '-b:v',
-    '500k',            // Ultra low bitrate
-    '-maxrate',
-    '750k',            // Low max rate
-    '-minrate',
-    '300k',            // Low min rate
+    'libx264',         // H.264 : décodé nativement sur tous les Android
+    '-preset',
+    'fast',
     '-crf',
-    '40',              // Lower quality (more compression)
-    '-deadline',
-    'realtime',        // Fastest encoding (less complex)
-    '-g',
-    '1',               // Keyframe every frame (no buffering)
+    '28',              // Qualité raisonnable
+    '-maxrate',
+    '1000k',
+    '-bufsize',
+    '2000k',
+    '-movflags',
+    '+faststart',      // Métadonnées au début pour le streaming
     '-c:a',
-    'libvorbis',       // Vorbis audio codec
+    'aac',             // AAC : audio universel
     '-b:a',
-    '64k',             // Lower audio bitrate
+    '128k',
     '-ar',
-    '16000',           // Very low sample rate
+    '44100',
     '-ac',
-    '1',               // Mono
+    '2',
     outputPath,
   ]);
 
