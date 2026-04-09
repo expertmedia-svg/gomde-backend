@@ -104,6 +104,12 @@ exports.createBattle = async (req, res) => {
     // GOMDE D'OR : auto-inscrire les participants
     autoRegisterFromBattle(battle._id).catch(() => {});
   } catch (error) {
+    return handleBattleError(res, error);
+  }
+};
+
+// ── List battles ─────────────────────────────────────────────────────
+exports.listBattles = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
     const query = {};
