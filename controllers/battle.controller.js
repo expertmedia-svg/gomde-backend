@@ -109,7 +109,7 @@ exports.createBattle = async (req, res) => {
 };
 
 // ── List battles ─────────────────────────────────────────────────────
-exports.listBattles = async (req, res) => {
+exports.getBattles = async (req, res) => {
   try {
     const { status, page = 1, limit = 10 } = req.query;
     const query = {};
