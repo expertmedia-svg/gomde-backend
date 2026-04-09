@@ -2,6 +2,45 @@ const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
 const User = require('../models/user');
+const {
+  normalizeLocationKey,
+  resolveRegionFromCity,
+} = require('../services/location.service');
+const { calculateOfficialScore } = require('../services/score.service');
+
+const resolveUserRegion = (user) => {
+  const profile = user.profile || {};
+  if (profile.region) {
+    return profile.region;
+  }
+
+  return resolveRegionFromCity(profile.city);
+};
+
+const safeResolveUserRegion = (user) => {
+  try {
+    return resolveUserRegion(user);
+  } catch (error) {
+    return user?.profile?.region || null;
+  }
+};
+
+const buildLeaderboardRow = (user, rank) => {
+  const profile = user.profile || {};
+  const stats = user.stats || {};
+
+  return {
+    ...user.toObject(),
+    rank,
+    region: safeResolveUserRegion(user),
+    city: profile.city || null,
+    neighborhood: profile.neighborhood || null,
+    score: calculateOfficialScore(stats),
+    wins: Number(stats?.battles?.wins || 0),
+    totalViews: Number(stats.totalViews || 0),
+    totalLikes: Number(stats.totalLikes || 0),
+  };
+};
 
 router.get('/', protect, async (req, res) => {
   try {
@@ -11,10 +50,11 @@ router.get('/', protect, async (req, res) => {
     if (role) query.role = role;
     if (city) query['profile.city'] = city;
     if (search) {
+      const safe = search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
       query.$or = [
-        { username: { $regex: search, $options: 'i' } },
-        { 'profile.city': { $regex: search, $options: 'i' } },
-        { 'profile.neighborhood': { $regex: search, $options: 'i' } }
+        { username: { $regex: safe, $options: 'i' } },
+        { 'profile.city': { $regex: safe, $options: 'i' } },
+        { 'profile.neighborhood': { $regex: safe, $options: 'i' } }
       ];
     }
 
@@ -31,6 +71,98 @@ router.get('/', protect, async (req, res) => {
       totalPages: Math.ceil(total / limit),
       currentPage: Number(page),
       total
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/leaderboard', protect, async (req, res) => {
+  try {
+    const {
+      scope = 'national',
+      city,
+      neighborhood,
+      region,
+      page = 1,
+      limit = 50,
+    } = req.query;
+
+    const normalizedScope = ['national', 'region', 'city', 'neighborhood'].includes(scope)
+      ? scope
+      : 'national';
+
+    const safeLimit = Math.min(100, Math.max(1, Number(limit) || 50));
+    const safePage = Math.max(1, Number(page) || 1);
+
+    const users = await User.find({
+      isActive: true,
+      role: { $ne: 'admin' },
+    })
+      .select('-password')
+      .lean(false);
+
+    const filteredUsers = users.filter((user) => {
+      const profile = user.profile || {};
+      const userCity = normalizeLocationKey(profile.city);
+      const userNeighborhood = normalizeLocationKey(profile.neighborhood);
+      const userRegion = normalizeLocationKey(safeResolveUserRegion(user));
+
+      if (normalizedScope === 'city') {
+        return city ? userCity === normalizeLocationKey(city) : !!userCity;
+      }
+
+      if (normalizedScope === 'neighborhood') {
+        if (!neighborhood) {
+          return false;
+        }
+
+        const matchesNeighborhood = userNeighborhood === normalizeLocationKey(neighborhood);
+        if (!city) {
+          return matchesNeighborhood;
+        }
+
+        return matchesNeighborhood && userCity === normalizeLocationKey(city);
+      }
+
+      if (normalizedScope === 'region') {
+        return region ? userRegion === normalizeLocationKey(region) : !!userRegion;
+      }
+
+      return true;
+    });
+
+    filteredUsers.sort((left, right) => {
+      const leftScore = calculateOfficialScore(left?.stats);
+      const rightScore = calculateOfficialScore(right?.stats);
+      if (rightScore !== leftScore) return rightScore - leftScore;
+
+      const leftWins = Number(left?.stats?.battles?.wins || 0);
+      const rightWins = Number(right?.stats?.battles?.wins || 0);
+      if (rightWins !== leftWins) return rightWins - leftWins;
+
+      const leftViews = Number(left?.stats?.totalViews || 0);
+      const rightViews = Number(right?.stats?.totalViews || 0);
+      if (rightViews !== leftViews) return rightViews - leftViews;
+
+      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
+    });
+
+    const rankedUsers = filteredUsers.map((user, index) => buildLeaderboardRow(user, index + 1));
+    const pagedUsers = rankedUsers.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+
+    res.json({
+      scope: normalizedScope,
+      users: pagedUsers,
+      total: rankedUsers.length,
+      currentPage: safePage,
+      totalPages: Math.max(1, Math.ceil(rankedUsers.length / safeLimit)),
+      filters: {
+        city: city || null,
+        neighborhood: neighborhood || null,
+        region: region || null,
+      },
     });
   } catch (error) {
     console.error(error);

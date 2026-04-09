@@ -2,6 +2,12 @@ const AudioTrack = require('../models/audiotrack');
 const path = require('path');
 const fs = require('fs');
 const { renderStudioMix } = require('../services/audioMix.service');
+const { recomputeUserScoreById } = require('../services/score.service');
+
+const findRecordingById = (recordingId) => AudioTrack.findOne({
+  _id: recordingId,
+  instrumental: false,
+}).populate('user', 'username profile.city profile.neighborhood profile.avatar');
 
 const INSTRU_DIRECTORY = path.join(__dirname, '..', 'uploads', 'instru');
 const SUPPORTED_AUDIO_EXTENSIONS = new Set(['.mp3', '.wav', '.m4a', '.aac', '.ogg', '.webm']);
@@ -138,7 +144,8 @@ exports.saveAudioRecording = async (req, res) => {
       shareToCommunity,
       sourceRecordingId,
       timeline,
-      renderMix
+      renderMix,
+      previewMix
     } = req.body;
     const parsedEffects = safeJsonParse(effects, {
       reverb: 0,
@@ -188,6 +195,7 @@ exports.saveAudioRecording = async (req, res) => {
     };
     const selectedInstrumental = instrumentalId ? await AudioTrack.findById(instrumentalId) : null;
     const shouldRenderMix = renderMix === true || renderMix === 'true';
+    const isPreviewMix = previewMix === true || previewMix === 'true';
 
     if (!mixFile && !rawVoiceFile) {
       return res.status(400).json({ message: 'No audio source uploaded' });
@@ -214,6 +222,24 @@ exports.saveAudioRecording = async (req, res) => {
 
     if (!finalAudioUrl) {
       return res.status(400).json({ message: 'Unable to render or resolve the final mix' });
+    }
+
+    if (isPreviewMix) {
+      return res.json({
+        preview: true,
+        audioUrl: finalAudioUrl,
+        title: title || 'Préécoute studio',
+        metadata: {
+          effects: parsedEffects,
+          channelLevels: parsedLevels,
+          channelPan: parsedPan,
+          instrumentalId: selectedInstrumental?._id,
+          instrumentalTitle: selectedInstrumental?.title,
+          instrumentalUrl: selectedInstrumental?.audioUrl,
+          rawVoiceUrl: rawVoiceFile ? `/uploads/audio/${rawVoiceFile.filename}` : undefined,
+          timeline: sanitizedTimeline,
+        },
+      });
     }
     
     const track = await AudioTrack.create({
@@ -350,6 +376,120 @@ exports.publishRecording = async (req, res) => {
     await recording.save();
 
     res.json(recording);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.incrementRecordingPlay = async (req, res) => {
+  try {
+    const recording = await findRecordingById(req.params.id);
+
+    if (!recording || !recording.shareToCommunity || !recording.isPublic) {
+      return res.status(404).json({ message: 'Recording not found' });
+    }
+
+    recording.plays += 1;
+    await recording.save();
+
+    if (recording.user?._id) {
+      await AudioTrack.db.model('User').findByIdAndUpdate(recording.user._id, {
+        $inc: { 'stats.totalViews': 1 }
+      });
+      await recomputeUserScoreById(recording.user._id);
+    }
+
+    res.json({ plays: recording.plays });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.toggleRecordingLike = async (req, res) => {
+  try {
+    const recording = await findRecordingById(req.params.id);
+
+    if (!recording || !recording.shareToCommunity || !recording.isPublic) {
+      return res.status(404).json({ message: 'Recording not found' });
+    }
+
+    const existingIndex = recording.likes.findIndex(
+      (entry) => entry.toString() === req.user._id.toString()
+    );
+    const liked = existingIndex === -1;
+
+    if (liked) {
+      recording.likes.push(req.user._id);
+    } else {
+      recording.likes.splice(existingIndex, 1);
+    }
+
+    await recording.save();
+
+    if (recording.user?._id) {
+      await AudioTrack.db.model('User').findByIdAndUpdate(recording.user._id, {
+        $inc: { 'stats.totalLikes': liked ? 1 : -1 }
+      });
+      await recomputeUserScoreById(recording.user._id);
+    }
+
+    res.json({ liked, likes: recording.likes.length });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.commentRecording = async (req, res) => {
+  try {
+    const text = req.body?.text?.toString().trim();
+    if (!text) {
+      return res.status(400).json({ message: 'Comment text is required' });
+    }
+
+    const recording = await findRecordingById(req.params.id);
+
+    if (!recording || !recording.shareToCommunity || !recording.isPublic) {
+      return res.status(404).json({ message: 'Recording not found' });
+    }
+
+    recording.comments.push({
+      user: req.user._id,
+      text,
+    });
+    await recording.save();
+
+    const populatedRecording = await AudioTrack.findById(recording._id)
+      .populate('comments.user', 'username profile.avatar profile.city profile.neighborhood');
+
+    res.json(populatedRecording?.comments || []);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.shareRecording = async (req, res) => {
+  try {
+    const recording = await findRecordingById(req.params.id);
+
+    if (!recording || !recording.shareToCommunity || !recording.isPublic) {
+      return res.status(404).json({ message: 'Recording not found' });
+    }
+
+    recording.shares += 1;
+    await recording.save();
+
+    if (recording.user?._id) {
+      await AudioTrack.db.model('User').findByIdAndUpdate(recording.user._id, {
+        $inc: { 'stats.totalShares': 1 }
+      });
+      await recomputeUserScoreById(recording.user._id);
+    }
+
+    res.json({ shares: recording.shares });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

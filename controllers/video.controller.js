@@ -2,6 +2,7 @@ const Video = require('../models/video');
 const User = require('../models/user');
 const path = require('path');
 const { createVideoThumbnail, transcodeFeedVideo, safeUnlink } = require('../services/videoTranscode.service');
+const { recomputeUserScoreById } = require('../services/score.service');
 
 // Helper to get correct protocol (handles nginx reverse proxy)
 const getRequestProtocol = (req) => {
@@ -21,7 +22,7 @@ const ensureAbsoluteUrls = (video, req) => {
   if (!video) return video;
   
   const protocol = getRequestProtocol(req);
-  const host = req.get('host') || 'gomde.yingr-ai.com';
+  const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
   const baseUrl = `${protocol}://${host}`;
   
   const enriched = { ...video };
@@ -101,7 +102,7 @@ exports.uploadVideo = async (req, res) => {
     
     // Construct absolute URLs for files
     const protocol = getRequestProtocol(req);
-    const host = req.get('host') || 'gomde.yingr-ai.com';
+    const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
     const baseUrl = `${protocol}://${host}`;
     
     const video = await Video.create({
@@ -134,11 +135,6 @@ exports.uploadVideo = async (req, res) => {
         })
       );
     }
-    
-    // Update user stats
-    await User.findByIdAndUpdate(req.user._id, {
-      $inc: { 'stats.totalViews': 1 }
-    });
     
     res.status(201).json({
       ...video.toObject(),
@@ -225,6 +221,8 @@ exports.incrementVideoView = async (req, res) => {
       $inc: { 'stats.totalViews': 1 }
     });
 
+    await recomputeUserScoreById(video.user);
+
     res.json({ views: video.views });
   } catch (error) {
     console.error(error);
@@ -246,6 +244,8 @@ exports.likeVideo = async (req, res) => {
     await User.findByIdAndUpdate(video.user, {
       $inc: { 'stats.totalLikes': result.liked ? 1 : -1 }
     });
+
+    await recomputeUserScoreById(video.user);
     
     res.json(result);
   } catch (error) {
@@ -290,6 +290,11 @@ exports.shareVideo = async (req, res) => {
     
     video.shares += 1;
     await video.save();
+
+    await User.findByIdAndUpdate(video.user, {
+      $inc: { 'stats.totalShares': 1 }
+    });
+    await recomputeUserScoreById(video.user);
     
     res.json({ shares: video.shares });
   } catch (error) {

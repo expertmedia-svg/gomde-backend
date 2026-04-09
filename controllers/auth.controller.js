@@ -1,10 +1,11 @@
 const User = require('../models/user');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
+const { normalizeBurkinaProfile } = require('../services/location.service');
 
 const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: process.env.JWT_EXPIRE
+    expiresIn: process.env.JWT_EXPIRE || '7d'
   });
 };
 
@@ -15,24 +16,22 @@ exports.register = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, role, city, neighborhood } = req.body;
-    const normalizedRole = role === 'admin' ? 'admin' : 'user';
+    const { username, email, password, role, city, neighborhood, region } = req.body;
+    const normalizedRole = (role === 'artist') ? 'artist' : 'user';
 
     const userExists = await User.findOne({ $or: [{ email }, { username }] });
     if (userExists) {
       return res.status(400).json({ message: 'User already exists' });
     }
 
+    const profile = normalizeBurkinaProfile({ city, neighborhood, region });
+
     const user = await User.create({
       username,
       email,
       password,
       role: normalizedRole,
-      profile: {
-        city,
-        neighborhood,
-        country: 'Burkina Faso'
-      }
+      profile
     });
 
     const token = generateToken(user._id);
@@ -50,8 +49,11 @@ exports.register = async (req, res) => {
       }
     });
   } catch (error) {
+    if (error?.message?.includes('Ville') || error?.message?.includes('Région') || error?.message?.includes('quartier')) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error(error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -89,7 +91,7 @@ exports.login = async (req, res) => {
     });
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error', error: error.message });
+    res.status(500).json({ message: 'Server error' });
   }
 };
 
@@ -119,9 +121,23 @@ exports.updateProfile = async (req, res) => {
     });
 
     if (updates.profile) {
+      const currentUser = await User.findById(req.user._id).select('profile');
+      if (!currentUser) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+
       updates.profile = {
-        ...updates.profile,
-        country: 'Burkina Faso'
+        ...currentUser.profile,
+        ...normalizeBurkinaProfile({
+          city: updates.profile.city,
+          neighborhood: updates.profile.neighborhood,
+          region: updates.profile.region,
+          currentProfile: currentUser.profile,
+        }),
+        bio: updates.profile.bio ?? currentUser.profile?.bio,
+        fullName: updates.profile.fullName ?? currentUser.profile?.fullName,
+        avatar: updates.profile.avatar ?? currentUser.profile?.avatar,
+        socialLinks: updates.profile.socialLinks ?? currentUser.profile?.socialLinks,
       };
     }
     
@@ -133,6 +149,9 @@ exports.updateProfile = async (req, res) => {
     
     res.json(user);
   } catch (error) {
+    if (error?.message?.includes('Ville') || error?.message?.includes('Région') || error?.message?.includes('quartier')) {
+      return res.status(400).json({ message: error.message });
+    }
     console.error(error);
     res.status(500).json({ message: 'Server error' });
   }

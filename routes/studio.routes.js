@@ -11,7 +11,11 @@ const {
   getUserRecordings,
   uploadInstrumental,
   getCommunityRecordings,
-  publishRecording
+  publishRecording,
+  incrementRecordingPlay,
+  toggleRecordingLike,
+  commentRecording,
+  shareRecording
 } = require('../controllers/studio.controller');
 
 // Ensure upload directory exists
@@ -49,5 +53,9 @@ router.post('/instrumentals', protect, admin, audioUpload.single('audio'), uploa
 router.post('/record', protect, recordingUpload, saveAudioRecording);
 router.get('/my-recordings', protect, getUserRecordings);
 router.post('/recordings/:id/publish', protect, uploadImageWithLogging, publishRecording);
+router.post('/recordings/:id/play', protect, incrementRecordingPlay);
+router.post('/recordings/:id/like', protect, toggleRecordingLike);
+router.post('/recordings/:id/comment', protect, commentRecording);
+router.post('/recordings/:id/share', protect, shareRecording);
 
 module.exports = router;

@@ -74,6 +74,7 @@ exports.renderStudioMix = async ({
   const beatLevel = clamp(channelLevels.beat ?? 76, 0, 200) / 100;
   const reverbAmount = clamp(effects.reverb ?? 0, 0, 1);
   const autotuneAmount = clamp(effects.autotune ?? 0, 0, 1);
+  const autotuneWetMix = clamp(effects.autotune_wetMix ?? 1, 0, 1);
   const compressionAmount = clamp(effects.compression ?? 0.35, 0, 1);
   const lowEq = clamp(effects.lowEq ?? 0, -1, 1) * 10;
   const midEq = clamp(effects.midEq ?? 0, -1, 1) * 10;
@@ -188,7 +189,7 @@ exports.renderStudioMix = async ({
           strength: autotuneAmount,
           scale: scaleName,
           rootNote: rootNote,
-          wetMix: 1.0
+          wetMix: autotuneWetMix
         });
         
         // Convert WAV to M4A
@@ -205,7 +206,7 @@ exports.renderStudioMix = async ({
           fs.unlinkSync(autotuneWavPath);
         }
         
-        console.log(`[AUTOTUNE] Applied (strength=${autotuneAmount}, scale=${scaleName})`);
+        console.log(`[AUTOTUNE] Applied (strength=${autotuneAmount}, scale=${scaleName}, wetMix=${autotuneWetMix})`);
       } else {
         console.warn('[AUTOTUNE] Python/librosa not available, skipping autotune');
       }

@@ -38,7 +38,10 @@ const videoSchema = new mongoose.Schema({
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User'
     },
-    text: String,
+    text: {
+      type: String,
+      maxlength: 1000
+    },
     createdAt: {
       type: Date,
       default: Date.now
@@ -70,6 +73,11 @@ const videoSchema = new mongoose.Schema({
     default: Date.now
   }
 });
+
+// ── Indexes ──────────────────────────────────────────────────────────
+videoSchema.index({ user: 1, createdAt: -1 });
+videoSchema.index({ isPublished: 1, createdAt: -1 });
+videoSchema.index({ battleId: 1 });
 
 videoSchema.methods.incrementViews = function() {
   this.views += 1;

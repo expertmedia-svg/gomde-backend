@@ -220,13 +220,15 @@ if __name__ == '__main__':
     strength = float(sys.argv[3]) if len(sys.argv) > 3 else 1.0
     scale = sys.argv[4] if len(sys.argv) > 4 else 'major'
     root = int(sys.argv[5]) if len(sys.argv) > 5 else 0
+    wet_mix = float(sys.argv[6]) if len(sys.argv) > 6 else 1.0
     
     result = apply_autotune(
         input_path,
         output_path,
         strength=strength,
         scale_name=scale,
-        root_note=root
+        root_note=root,
+        wet_mix=wet_mix
     )
     
     print(json.dumps(result))

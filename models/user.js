@@ -33,10 +33,11 @@ const userSchema = new mongoose.Schema({
     bio: String,
     avatar: {
       type: String,
-      default: 'https://via.placeholder.com/150'
+      default: '/public/assets/gomde-logo.png'
     },
     city: String,
     neighborhood: String,
+    region: String,
     country: String,
     socialLinks: {
       instagram: String,
@@ -54,7 +55,9 @@ const userSchema = new mongoose.Schema({
     followers: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     following: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
     totalLikes: { type: Number, default: 0 },
-    totalViews: { type: Number, default: 0 }
+    totalViews: { type: Number, default: 0 },
+    totalShares: { type: Number, default: 0 },
+    totalBattleVotes: { type: Number, default: 0 }
   },
   verified: {
     type: Boolean,
@@ -92,10 +95,30 @@ userSchema.methods.comparePassword = async function(candidatePassword) {
 };
 
 userSchema.methods.updateStats = function() {
-  this.stats.score = (this.stats.battles.wins * 100) + 
-                     (this.stats.totalLikes * 2) + 
-                     (this.stats.totalViews * 0.5);
+  const wins = Number(this.stats?.battles?.wins || 0);
+  const totalBattles = Number(this.stats?.battles?.total || 0);
+  const totalLikes = Number(this.stats?.totalLikes || 0);
+  const totalViews = Number(this.stats?.totalViews || 0);
+  const totalShares = Number(this.stats?.totalShares || 0);
+  const totalBattleVotes = Number(this.stats?.totalBattleVotes || 0);
+
+  this.stats.score = Math.max(
+    0,
+    Math.round(
+      wins * 150 +
+        totalBattles * 25 +
+        totalBattleVotes * 4 +
+        totalLikes * 3 +
+        totalShares * 6 +
+        totalViews
+    )
+  );
   return this.save();
 };
+
+// ── Indexes ──────────────────────────────────────────────────────────
+userSchema.index({ 'stats.score': -1 });
+userSchema.index({ 'profile.city': 1 });
+userSchema.index({ role: 1, createdAt: -1 });
 
 module.exports = mongoose.model('User', userSchema);

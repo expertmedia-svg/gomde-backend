@@ -41,7 +41,8 @@ exports.applyAutotune = async (options) => {
       outputPath,
       String(strength),
       scale,
-      String(rootNote)
+      String(rootNote),
+      String(wetMix)
     ];
 
     const pythonProcess = spawn('python', pythonArgs, {

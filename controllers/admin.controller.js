@@ -2,12 +2,14 @@ const User = require('../models/user');
 const Video = require('../models/video');
 const Battle = require('../models/battle');
 
+const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
+
 exports.getDashboardStats = async (req, res) => {
   try {
     const totalUsers = await User.countDocuments();
     const totalVideos = await Video.countDocuments();
     const totalBattles = await Battle.countDocuments();
-    const activeBattles = await Battle.countDocuments({ status: 'active' });
+    const activeBattles = await Battle.countDocuments({ status: { $in: ['voting', 'accepted'] } });
     
     const usersByRole = await User.aggregate([
       { $group: { _id: '$role', count: { $sum: 1 } } }
@@ -45,9 +47,10 @@ exports.getAllUsers = async (req, res) => {
     
     if (role) query.role = role;
     if (search) {
+      const safe = escapeRegex(search);
       query.$or = [
-        { username: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
+        { username: { $regex: safe, $options: 'i' } },
+        { email: { $regex: safe, $options: 'i' } }
       ];
     }
     
@@ -74,6 +77,10 @@ exports.getAllUsers = async (req, res) => {
 exports.updateUserRole = async (req, res) => {
   try {
     const { role } = req.body;
+    const validRoles = ['user', 'artist', 'admin'];
+    if (!validRoles.includes(role)) {
+      return res.status(400).json({ message: `Rôle invalide. Valeurs acceptées: ${validRoles.join(', ')}` });
+    }
     const user = await User.findByIdAndUpdate(
       req.params.id,
       { role },

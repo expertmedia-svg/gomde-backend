@@ -1,5 +1,27 @@
+const jwt = require('jsonwebtoken');
+const User = require('../models/user');
+
 module.exports = (io) => {
   const rooms = new Map();
+
+  // Socket.IO JWT authentication middleware
+  io.use(async (socket, next) => {
+    try {
+      const token = socket.handshake.auth?.token || socket.handshake.query?.token;
+      if (!token) {
+        return next(new Error('Authentication required'));
+      }
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      const user = await User.findById(decoded.id).select('username role isActive');
+      if (!user || !user.isActive) {
+        return next(new Error('User not found or disabled'));
+      }
+      socket.user = user;
+      next();
+    } catch (err) {
+      next(new Error('Invalid token'));
+    }
+  });
 
   const normalizeRole = (role) => role === 'participant' ? 'participant' : 'spectator';
 
