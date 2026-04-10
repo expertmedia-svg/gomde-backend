@@ -14,12 +14,12 @@ router.get('/arena', async (req, res) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const query = {
-      status: { $in: ['voting', 'active'] },
+      status: { $in: ['active', 'voting'] },
       'entries.1': { $exists: true } // Au moins 2 vidéos soumises
     };
 
-    if (status === 'voting') query.status = 'voting';
     if (status === 'active') query.status = 'active';
+    if (status === 'voting') query.status = { $in: ['active', 'voting'] };
 
     const battles = await Battle.find(query)
       .populate('creator', 'username profile.avatar profile.city')
@@ -160,7 +160,7 @@ router.get('/token/:battleId', protect, async (req, res) => {
       });
     }
 
-    if (battle.status !== 'active') {
+    if (!['active', 'voting'].includes(battle.status)) {
       return res.status(409).json({
         enabled: false,
         message: 'Battle is not live yet'

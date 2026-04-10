@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { buildDisciplinePayload, DISCIPLINE_REGISTRY, normalizeDisciplineList } = require('../constants/disciplines');
 
 const audioTrackSchema = new mongoose.Schema({
   title: {
@@ -7,9 +8,25 @@ const audioTrackSchema = new mongoose.Schema({
   },
   artist: String,
   genre: String,
+  primaryCategory: {
+    type: String,
+    enum: DISCIPLINE_REGISTRY.map((discipline) => discipline.slug),
+    default: buildDisciplinePayload(null).primaryCategory,
+  },
+  categories: {
+    type: [String],
+    default: buildDisciplinePayload(null).categories,
+    set: (value) => normalizeDisciplineList(value, { fallback: buildDisciplinePayload(null).categories }),
+  },
   bpm: Number,
   duration: Number,
   audioUrl: String,
+  uploadChecksum: String,
+  uploadSizeBytes: {
+    type: Number,
+    default: 0,
+  },
+  uploadMimeType: String,
   instrumental: {
     type: Boolean,
     default: true
@@ -113,6 +130,17 @@ const audioTrackSchema = new mongoose.Schema({
     type: Date,
     default: Date.now
   }
+});
+
+audioTrackSchema.pre('validate', function normalizeAudioTrackCategories(next) {
+  const payload = buildDisciplinePayload(
+    this.categories?.length ? this.categories : this.primaryCategory || this.genre || this.category,
+    { fallback: buildDisciplinePayload(null).categories }
+  );
+
+  this.categories = payload.categories;
+  this.primaryCategory = payload.primaryCategory;
+  next();
 });
 
 module.exports = mongoose.model('AudioTrack', audioTrackSchema);

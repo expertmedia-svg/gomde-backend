@@ -6,6 +6,8 @@ const {
   normalizeLocationKey,
   resolveRegionFromCity,
 } = require('../services/location.service');
+const { buildDisciplinePayload } = require('../constants/disciplines');
+const { getChampionForLeaderboard } = require('../services/champion.service');
 const { calculateOfficialScore } = require('../services/score.service');
 
 const resolveUserRegion = (user) => {
@@ -85,6 +87,7 @@ router.get('/leaderboard', protect, async (req, res) => {
       city,
       neighborhood,
       region,
+      category,
       page = 1,
       limit = 50,
     } = req.query;
@@ -95,10 +98,12 @@ router.get('/leaderboard', protect, async (req, res) => {
 
     const safeLimit = Math.min(100, Math.max(1, Number(limit) || 50));
     const safePage = Math.max(1, Number(page) || 1);
+    const normalizedCategory = buildDisciplinePayload(category, { fallback: [] }).categories[0] || null;
 
     const users = await User.find({
       isActive: true,
       role: { $ne: 'admin' },
+      ...(normalizedCategory ? { disciplines: normalizedCategory } : {}),
     })
       .select('-password')
       .lean(false);
@@ -151,9 +156,24 @@ router.get('/leaderboard', protect, async (req, res) => {
 
     const rankedUsers = filteredUsers.map((user, index) => buildLeaderboardRow(user, index + 1));
     const pagedUsers = rankedUsers.slice((safePage - 1) * safeLimit, safePage * safeLimit);
+    const championLevel = normalizedScope === 'neighborhood'
+      ? 'sector'
+      : normalizedScope === 'region'
+      ? 'regional'
+      : 'national';
+    const championUser = filteredUsers[0] || null;
+    const champion = normalizedCategory && championUser
+      ? await getChampionForLeaderboard({
+          category: normalizedCategory,
+          level: championLevel,
+          user: championUser,
+        })
+      : null;
 
     res.json({
       scope: normalizedScope,
+      category: normalizedCategory,
+      champion,
       users: pagedUsers,
       total: rankedUsers.length,
       currentPage: safePage,

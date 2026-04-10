@@ -429,7 +429,7 @@ const PORT = process.env.PORT || 5000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 
-  // Auto-close expired battles every 15 min
+  // Auto-close expired battles every minute
   const { closeExpiredBattles } = require('./controllers/battle.controller');
   setInterval(async () => {
     try {
@@ -440,7 +440,7 @@ server.listen(PORT, () => {
     } catch (err) {
       console.error('[Battle Cron] Error:', err.message);
     }
-  }, 15 * 60 * 1000);
+  }, 60 * 1000);
 });
 
 // Graceful shutdown

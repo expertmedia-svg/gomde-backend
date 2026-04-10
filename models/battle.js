@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { buildDisciplinePayload, DISCIPLINE_REGISTRY, normalizeDisciplineList } = require('../constants/disciplines');
 
 // ── Timing constants ─────────────────────────────────────────────────
 const SUBMISSION_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 h pour soumettre sa vidéo
@@ -14,6 +15,16 @@ const battleSchema = new mongoose.Schema({
   description: {
     type: String,
     maxlength: 500
+  },
+  primaryCategory: {
+    type: String,
+    enum: DISCIPLINE_REGISTRY.map((discipline) => discipline.slug),
+    default: buildDisciplinePayload(null).primaryCategory,
+  },
+  categories: {
+    type: [String],
+    default: buildDisciplinePayload(null).categories,
+    set: (value) => normalizeDisciplineList(value, { fallback: buildDisciplinePayload(null).categories }),
   },
 
   // ── Participants ───────────────────────────────────────────────────
@@ -61,6 +72,12 @@ const battleSchema = new mongoose.Schema({
     videoUrl: String,
     videoPublicId: String,
     thumbnailUrl: String,
+    uploadChecksum: String,
+    uploadSizeBytes: {
+      type: Number,
+      default: 0,
+    },
+    uploadMimeType: String,
     uploadedAt: {
       type: Date,
       default: Date.now
@@ -129,6 +146,17 @@ const battleSchema = new mongoose.Schema({
   submissionDeadline: Date,
   // Deadline de fin des votes (activatedAt + 6 j)
   voteDeadline: Date,
+  completedAt: Date,
+  lifecycle: {
+    inLiveFeed: {
+      type: Boolean,
+      default: false,
+    },
+    enteredLiveAt: Date,
+    archivedAt: Date,
+    lastStateChangeAt: Date,
+    completionReason: String,
+  },
 
   startDate: Date,
   endDate: Date,
@@ -165,6 +193,7 @@ battleSchema.methods.calculateWinner = function () {
 
   this.winner = winner;
   this.status = 'completed';
+  this.completedAt = new Date();
 
   return this.save();
 };
@@ -188,10 +217,22 @@ battleSchema.methods.isVotingExpired = function () {
 battleSchema.statics.SUBMISSION_WINDOW_MS = SUBMISSION_WINDOW_MS;
 battleSchema.statics.VOTING_WINDOW_MS = VOTING_WINDOW_MS;
 
+battleSchema.pre('validate', function normalizeBattleCategories(next) {
+  const payload = buildDisciplinePayload(
+    this.categories?.length ? this.categories : this.primaryCategory || this.category,
+    { fallback: buildDisciplinePayload(null).categories }
+  );
+
+  this.categories = payload.categories;
+  this.primaryCategory = payload.primaryCategory;
+  next();
+});
+
 // ── Indexes for cron queries and API performance ─────────────────────
 battleSchema.index({ status: 1, submissionDeadline: 1 });
 battleSchema.index({ status: 1, voteDeadline: 1 });
 battleSchema.index({ status: 1, createdAt: -1 });
+battleSchema.index({ categories: 1, status: 1, voteDeadline: 1 });
 battleSchema.index({ creator: 1 });
 battleSchema.index({ challenger: 1 });
 

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const { buildDisciplinePayload, DISCIPLINE_REGISTRY, normalizeDisciplineList } = require('../constants/disciplines');
 
 const userSchema = new mongoose.Schema({
   username: {
@@ -27,6 +28,16 @@ const userSchema = new mongoose.Schema({
     type: String,
     enum: ['user', 'artist', 'admin'],
     default: 'user'
+  },
+  primaryDiscipline: {
+    type: String,
+    enum: DISCIPLINE_REGISTRY.map((discipline) => discipline.slug),
+    default: buildDisciplinePayload(null).primaryCategory,
+  },
+  disciplines: {
+    type: [String],
+    default: buildDisciplinePayload(null).categories,
+    set: (value) => normalizeDisciplineList(value, { fallback: buildDisciplinePayload(null).categories }),
   },
   profile: {
     fullName: String,
@@ -93,6 +104,17 @@ userSchema.pre('save', async function(next) {
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
 };
+
+userSchema.pre('validate', function normalizeUserDisciplines(next) {
+  const payload = buildDisciplinePayload(
+    this.disciplines?.length ? this.disciplines : this.primaryDiscipline || this.category,
+    { fallback: buildDisciplinePayload(null).categories }
+  );
+
+  this.disciplines = payload.categories;
+  this.primaryDiscipline = payload.primaryCategory;
+  next();
+});
 
 userSchema.methods.updateStats = function() {
   const wins = Number(this.stats?.battles?.wins || 0);

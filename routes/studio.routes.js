@@ -15,7 +15,8 @@ const {
   incrementRecordingPlay,
   toggleRecordingLike,
   commentRecording,
-  shareRecording
+  shareRecording,
+  deleteRecording
 } = require('../controllers/studio.controller');
 
 // Ensure upload directory exists
@@ -57,5 +58,6 @@ router.post('/recordings/:id/play', protect, incrementRecordingPlay);
 router.post('/recordings/:id/like', protect, toggleRecordingLike);
 router.post('/recordings/:id/comment', protect, commentRecording);
 router.post('/recordings/:id/share', protect, shareRecording);
+router.delete('/recordings/:id', protect, deleteRecording);
 
 module.exports = router;

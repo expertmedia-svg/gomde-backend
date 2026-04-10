@@ -1,8 +1,49 @@
 const AudioTrack = require('../models/audiotrack');
 const path = require('path');
 const fs = require('fs');
+const { buildDisciplinePayload } = require('../constants/disciplines');
+const { buildFileIntegrity } = require('../services/fileIntegrity.service');
 const { renderStudioMix } = require('../services/audioMix.service');
 const { recomputeUserScoreById } = require('../services/score.service');
+
+const safeRemoveStudioFile = async (filePath) => {
+  if (!filePath) {
+    return;
+  }
+
+  try {
+    await fs.promises.unlink(filePath);
+  } catch (error) {
+    if (error?.code !== 'ENOENT') {
+      throw error;
+    }
+  }
+};
+
+const resolveStudioUploadPath = (value, subdirectory) => {
+  if (typeof value !== 'string' || value.trim().length === 0) {
+    return null;
+  }
+
+  const candidate = value.trim();
+  let fileName = candidate;
+
+  try {
+    if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+      fileName = decodeURIComponent(new URL(candidate).pathname.split('/').pop() || '');
+    } else {
+      fileName = decodeURIComponent(path.basename(candidate));
+    }
+  } catch (error) {
+    fileName = path.basename(candidate);
+  }
+
+  if (!fileName) {
+    return null;
+  }
+
+  return path.join(__dirname, '..', 'uploads', subdirectory, fileName);
+};
 
 const findRecordingById = (recordingId) => AudioTrack.findOne({
   _id: recordingId,
@@ -196,10 +237,14 @@ exports.saveAudioRecording = async (req, res) => {
     const selectedInstrumental = instrumentalId ? await AudioTrack.findById(instrumentalId) : null;
     const shouldRenderMix = renderMix === true || renderMix === 'true';
     const isPreviewMix = previewMix === true || previewMix === 'true';
+    const normalizedCategories = buildDisciplinePayload(selectedInstrumental?.categories || selectedInstrumental?.primaryCategory || selectedInstrumental?.genre);
 
     if (!mixFile && !rawVoiceFile) {
       return res.status(400).json({ message: 'No audio source uploaded' });
     }
+
+    const finalIntegritySource = mixFile || rawVoiceFile;
+    const uploadIntegrity = await buildFileIntegrity(finalIntegritySource);
 
     let finalAudioUrl = mixFile ? `/uploads/audio/${mixFile.filename}` : null;
 
@@ -246,9 +291,14 @@ exports.saveAudioRecording = async (req, res) => {
       title: title || `Session studio ${new Date().toLocaleDateString('fr-FR')}`,
       artist: req.user.username,
       genre: selectedInstrumental?.genre || 'Freestyle',
+      primaryCategory: normalizedCategories.primaryCategory,
+      categories: normalizedCategories.categories,
       bpm: selectedInstrumental?.bpm,
       user: req.user._id,
       audioUrl: finalAudioUrl,
+      uploadChecksum: uploadIntegrity?.checksum || '',
+      uploadSizeBytes: uploadIntegrity?.sizeBytes || 0,
+      uploadMimeType: uploadIntegrity?.mimeType || '',
       instrumental: false,
       isPublic: shareToCommunity === true || shareToCommunity === 'true',
       shareToCommunity: shareToCommunity === true || shareToCommunity === 'true',
@@ -490,6 +540,55 @@ exports.shareRecording = async (req, res) => {
     }
 
     res.json({ shares: recording.shares });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.deleteRecording = async (req, res) => {
+  try {
+    const recording = await AudioTrack.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+      instrumental: false
+    });
+
+    if (!recording) {
+      return res.status(404).json({ message: 'Recording not found' });
+    }
+
+    const likeCount = Array.isArray(recording.likes) ? recording.likes.length : 0;
+    const plays = Number(recording.plays || 0);
+    const shares = Number(recording.shares || 0);
+    const audioPath = resolveStudioUploadPath(recording.audioUrl, 'audio');
+    const rawVoicePath = resolveStudioUploadPath(recording.metadata?.rawVoiceUrl, 'audio');
+    const coverPath = resolveStudioUploadPath(recording.coverImageUrl, 'covers');
+
+    await recording.deleteOne();
+
+    for (const filePath of [audioPath, rawVoicePath, coverPath]) {
+      if (!filePath) {
+        continue;
+      }
+
+      try {
+        await safeRemoveStudioFile(filePath);
+      } catch (cleanupError) {
+        console.error(cleanupError);
+      }
+    }
+
+    await AudioTrack.db.model('User').findByIdAndUpdate(recording.user, {
+      $inc: {
+        'stats.totalLikes': -likeCount,
+        'stats.totalViews': -plays,
+        'stats.totalShares': -shares,
+      }
+    });
+    await recomputeUserScoreById(recording.user);
+
+    res.json({ success: true, id: req.params.id });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

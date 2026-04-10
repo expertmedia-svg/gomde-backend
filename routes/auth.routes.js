@@ -15,7 +15,14 @@ router.post('/register', authLimiter, [
   body('username').isLength({ min: 3 }).trim(),
   body('email').isEmail().normalizeEmail(),
   body('password').isLength({ min: 6 }),
-  body('role').optional().isIn(['user', 'artist'])
+  body('role').optional().isIn(['user', 'artist']),
+  body('primaryDiscipline').optional().isString(),
+  body('disciplines').optional().custom((value) => {
+    if (typeof value === 'string' || Array.isArray(value)) {
+      return true;
+    }
+    throw new Error('Invalid disciplines payload');
+  })
 ], register);
 
 router.post('/login', authLimiter, [

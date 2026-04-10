@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const { buildDisciplinePayload, DISCIPLINE_REGISTRY, normalizeDisciplineList } = require('../constants/disciplines');
 
 const videoSchema = new mongoose.Schema({
   title: {
@@ -12,6 +13,16 @@ const videoSchema = new mongoose.Schema({
     enum: ['freestyle', 'battle'],
     default: 'freestyle'
   },
+  primaryCategory: {
+    type: String,
+    enum: DISCIPLINE_REGISTRY.map((discipline) => discipline.slug),
+    default: buildDisciplinePayload(null).primaryCategory,
+  },
+  categories: {
+    type: [String],
+    default: buildDisciplinePayload(null).categories,
+    set: (value) => normalizeDisciplineList(value, { fallback: buildDisciplinePayload(null).categories }),
+  },
   description: String,
   user: {
     type: mongoose.Schema.Types.ObjectId,
@@ -23,6 +34,12 @@ const videoSchema = new mongoose.Schema({
     required: true
   },
   videoPublicId: String,
+  uploadChecksum: String,
+  uploadSizeBytes: {
+    type: Number,
+    default: 0,
+  },
+  uploadMimeType: String,
   thumbnailUrl: String,
   duration: Number,
   views: {
@@ -78,6 +95,18 @@ const videoSchema = new mongoose.Schema({
 videoSchema.index({ user: 1, createdAt: -1 });
 videoSchema.index({ isPublished: 1, createdAt: -1 });
 videoSchema.index({ battleId: 1 });
+videoSchema.index({ categories: 1, createdAt: -1 });
+
+videoSchema.pre('validate', function normalizeVideoCategories(next) {
+  const payload = buildDisciplinePayload(
+    this.categories?.length ? this.categories : this.primaryCategory || this.category,
+    { fallback: buildDisciplinePayload(null).categories }
+  );
+
+  this.categories = payload.categories;
+  this.primaryCategory = payload.primaryCategory;
+  next();
+});
 
 videoSchema.methods.incrementViews = function() {
   this.views += 1;

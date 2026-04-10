@@ -1,8 +1,38 @@
 const Video = require('../models/video');
 const User = require('../models/user');
 const path = require('path');
+const { buildDisciplinePayload } = require('../constants/disciplines');
+const { buildFileIntegrity } = require('../services/fileIntegrity.service');
 const { createVideoThumbnail, transcodeFeedVideo, safeUnlink } = require('../services/videoTranscode.service');
 const { recomputeUserScoreById } = require('../services/score.service');
+
+const resolveUploadFilePath = (value, subdirectory, fallbackName) => {
+  const candidate = typeof value === 'string' && value.trim().length > 0
+    ? value.trim()
+    : fallbackName;
+
+  if (!candidate) {
+    return null;
+  }
+
+  let fileName = candidate;
+
+  try {
+    if (candidate.startsWith('http://') || candidate.startsWith('https://')) {
+      fileName = decodeURIComponent(new URL(candidate).pathname.split('/').pop() || '');
+    } else {
+      fileName = decodeURIComponent(path.basename(candidate));
+    }
+  } catch (error) {
+    fileName = path.basename(candidate);
+  }
+
+  if (!fileName) {
+    return null;
+  }
+
+  return path.join(__dirname, '..', 'uploads', subdirectory, fileName);
+};
 
 // Helper to get correct protocol (handles nginx reverse proxy)
 const getRequestProtocol = (req) => {
@@ -43,8 +73,9 @@ exports.uploadVideo = async (req, res) => {
       return res.status(400).json({ message: 'No video file uploaded' });
     }
     
-    const { title, description, tags, type } = req.body;
+    const { title, description, tags, type, category, categories } = req.body;
     const normalizedType = type === 'battle' ? 'battle' : 'freestyle';
+    const normalizedCategories = buildDisciplinePayload(categories || category);
     const normalizedTitle = title?.trim() ||
       (normalizedType === 'battle' ? 'Battle instant' : 'Freestyle instant');
     const sourcePath = req.file.path;
@@ -104,14 +135,20 @@ exports.uploadVideo = async (req, res) => {
     const protocol = getRequestProtocol(req);
     const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
     const baseUrl = `${protocol}://${host}`;
+    const integrity = await buildFileIntegrity(req.file);
     
     const video = await Video.create({
       title: normalizedTitle,
       type: normalizedType,
+      primaryCategory: normalizedCategories.primaryCategory,
+      categories: normalizedCategories.categories,
       description,
       user: req.user._id,
       videoUrl: `${baseUrl}/uploads/videos/${asset.videoFilename}`,
       videoPublicId: asset.videoFilename,
+      uploadChecksum: integrity?.checksum || '',
+      uploadSizeBytes: integrity?.sizeBytes || 0,
+      uploadMimeType: integrity?.mimeType || '',
       thumbnailUrl: asset.thumbnailFilename ? `${baseUrl}/uploads/thumbnails/${asset.thumbnailFilename}` : '',
       tags: tags ? tags.split(',') : []
     });
@@ -297,6 +334,57 @@ exports.shareVideo = async (req, res) => {
     await recomputeUserScoreById(video.user);
     
     res.json({ shares: video.shares });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.deleteVideo = async (req, res) => {
+  try {
+    const video = await Video.findOne({
+      _id: req.params.id,
+      user: req.user._id,
+    });
+
+    if (!video) {
+      return res.status(404).json({ message: 'Video not found' });
+    }
+
+    const likeCount = Array.isArray(video.likes) ? video.likes.length : 0;
+    const views = Number(video.views || 0);
+    const shares = Number(video.shares || 0);
+    const videoPath = resolveUploadFilePath(
+      video.videoUrl,
+      'videos',
+      video.videoPublicId,
+    );
+    const thumbnailPath = resolveUploadFilePath(video.thumbnailUrl, 'thumbnails');
+
+    await video.deleteOne();
+
+    for (const filePath of [videoPath, thumbnailPath]) {
+      if (!filePath) {
+        continue;
+      }
+
+      try {
+        await safeUnlink(filePath);
+      } catch (cleanupError) {
+        console.error(cleanupError);
+      }
+    }
+
+    await User.findByIdAndUpdate(video.user, {
+      $inc: {
+        'stats.totalLikes': -likeCount,
+        'stats.totalViews': -views,
+        'stats.totalShares': -shares,
+      }
+    });
+    await recomputeUserScoreById(video.user);
+
+    res.json({ success: true, id: req.params.id });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

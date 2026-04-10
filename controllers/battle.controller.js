@@ -2,7 +2,10 @@ const mongoose = require('mongoose');
 const Battle = require('../models/battle');
 const User = require('../models/user');
 const Video = require('../models/video');
+const { buildDisciplinePayload } = require('../constants/disciplines');
+const { buildFileIntegrity } = require('../services/fileIntegrity.service');
 const { applyBattleOutcomeStats, awardBattleVote } = require('../services/score.service');
+const { markBattleLive, syncBattleLifecycle } = require('../services/battleLifecycle.service');
 const { updateScoresFromBattle, autoRegisterFromBattle } = require('./gomdeOr.controller');
 
 const normalizeObjectId = (value) => {
@@ -45,12 +48,23 @@ const populateBattle = (query) =>
     .populate('entries.user', 'username profile.avatar stats.score')
     .populate('winner', 'username profile.avatar');
 
+const findExistingDirectBattle = async (firstUserId, secondUserId) => {
+  return Battle.findOne({
+    status: { $in: ['challenged', 'accepted', 'active', 'voting'] },
+    $or: [
+      { creator: firstUserId, challenger: secondUserId },
+      { creator: secondUserId, challenger: firstUserId },
+    ],
+  }).sort({ createdAt: -1 });
+};
+
 // ── Create battle & challenge a user ─────────────────────────────────
 exports.createBattle = async (req, res) => {
   try {
-    const { title, description, rules, challengedUserId } = req.body;
+    const { title, description, rules, challengedUserId, category, categories } = req.body;
     const normalizedTitle = title?.trim() || 'Battle studio';
     const normalizedDescription = description?.trim() || undefined;
+    const normalizedCategories = buildDisciplinePayload(categories || category);
     const normalizedRules = {
       maxDuration: Number(rules?.maxDuration) > 0 ? Number(rules.maxDuration) : 60,
       allowInstrumentals: rules?.allowInstrumentals !== false,
@@ -66,6 +80,19 @@ exports.createBattle = async (req, res) => {
       if (normalizedChallengerId === req.user._id.toString()) {
         return res.status(400).json({ message: 'Vous ne pouvez pas vous défier vous-même' });
       }
+
+      const conflictingBattle = await findExistingDirectBattle(
+        req.user._id,
+        normalizedChallengerId,
+      );
+      if (conflictingBattle) {
+        return res.status(409).json({
+          message: 'Un duel est déjà en cours ou en attente avec cette personne.',
+          battleId: conflictingBattle._id,
+          status: conflictingBattle.status,
+        });
+      }
+
       challenger = await User.findById(normalizedChallengerId);
       if (!challenger) {
         return res.status(404).json({ message: 'Utilisateur défié introuvable' });
@@ -76,6 +103,8 @@ exports.createBattle = async (req, res) => {
     const battle = await Battle.create({
       title: normalizedTitle,
       description: normalizedDescription,
+      primaryCategory: normalizedCategories.primaryCategory,
+      categories: normalizedCategories.categories,
       creator: req.user._id,
       challenger: challenger ? challenger._id : undefined,
       entries: [{ user: req.user._id }],
@@ -111,22 +140,32 @@ exports.createBattle = async (req, res) => {
 // ── List battles ─────────────────────────────────────────────────────
 exports.getBattles = async (req, res) => {
   try {
-    const { status, page = 1, limit = 10 } = req.query;
+    const { status, page = 1, limit = 10, category } = req.query;
+    const safePage = Math.max(1, Number(page) || 1);
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 10));
     const query = {};
 
     if (status) query.status = status;
+    if (category) {
+      const normalizedCategory = buildDisciplinePayload(category, { fallback: [] }).categories;
+      if (normalizedCategory.length > 0) {
+        query.categories = { $in: normalizedCategory };
+      }
+    }
 
     const battles = await populateBattle(Battle.find(query))
       .sort({ createdAt: -1 })
-      .limit(limit * 1)
-      .skip((page - 1) * limit);
+      .limit(safeLimit)
+      .skip((safePage - 1) * safeLimit);
 
     const total = await Battle.countDocuments(query);
 
+    await Promise.all(battles.map((battle) => syncBattleLifecycle(battle)));
+
     res.json({
       battles,
-      totalPages: Math.ceil(total / limit),
-      currentPage: page,
+      totalPages: Math.ceil(total / safeLimit),
+      currentPage: safePage,
       total
     });
   } catch (error) {
@@ -158,12 +197,14 @@ exports.getBattleById = async (req, res) => {
       return;
     }
 
-    const battle = await populateBattle(Battle.findById(battleId))
+    let battle = await populateBattle(Battle.findById(battleId))
       .populate('votes.user', 'username');
 
     if (!battle) {
       return res.status(404).json({ message: 'Battle not found' });
     }
+
+    battle = await syncBattleLifecycle(battle);
 
     res.json(battle);
   } catch (error) {
@@ -194,7 +235,13 @@ exports.acceptChallenge = async (req, res) => {
     battle.status = 'accepted';
     battle.acceptedAt = now;
     battle.submissionDeadline = new Date(now.getTime() + Battle.SUBMISSION_WINDOW_MS);
-    battle.entries.push({ user: req.user._id });
+
+    const challengerAlreadyPresent = battle.entries.some(
+      (entry) => entry.user?.toString() === req.user._id.toString()
+    );
+    if (!challengerAlreadyPresent) {
+      battle.entries.push({ user: req.user._id });
+    }
 
     await battle.save();
 
@@ -306,21 +353,20 @@ exports.submitEntry = async (req, res) => {
       return;
     }
 
-    const battle = await Battle.findById(battleId);
+    let battle = await Battle.findById(battleId);
 
     if (!battle) {
       return res.status(404).json({ message: 'Battle not found' });
     }
+
+    battle = await syncBattleLifecycle(battle);
 
     // Vérifier que la battle est en phase de soumission
     if (battle.status !== 'accepted') {
       return res.status(400).json({ message: 'La battle n\'est pas en phase de soumission' });
     }
 
-    // Vérifier la deadline de 24h
-    if (battle.isSubmissionExpired()) {
-      battle.status = 'forfeited';
-      await battle.save();
+    if (battle.status === 'forfeited') {
       return res.status(400).json({ message: 'La deadline de soumission (24h) est dépassée' });
     }
 
@@ -347,13 +393,14 @@ exports.submitEntry = async (req, res) => {
     entry.thumbnailUrl = resolvedThumbnailUrl;
     entry.uploadedAt = new Date();
 
+    const integrity = await buildFileIntegrity(req.file);
+    entry.uploadChecksum = integrity?.checksum || '';
+    entry.uploadSizeBytes = integrity?.sizeBytes || 0;
+    entry.uploadMimeType = integrity?.mimeType || '';
+
     // Si les 2 vidéos sont soumises → passer en phase de vote
     if (battle.entries.every(e => e.videoUrl) && battle.entries.length === 2) {
-      const now = new Date();
-      battle.status = 'voting';
-      battle.startDate = now;
-      battle.voteDeadline = new Date(now.getTime() + Battle.VOTING_WINDOW_MS);
-      battle.endDate = battle.voteDeadline;
+      markBattleLive(battle, new Date());
     }
 
     await battle.save();
@@ -361,10 +408,16 @@ exports.submitEntry = async (req, res) => {
     // Create video record
     await Video.create({
       title: `${battle.title} - Entry by ${req.user.username}`,
+      type: 'battle',
+      primaryCategory: battle.primaryCategory,
+      categories: battle.categories,
       user: req.user._id,
       videoUrl: resolvedVideoUrl,
       videoPublicId: resolvedVideoPublicId,
       thumbnailUrl: resolvedThumbnailUrl,
+      uploadChecksum: integrity?.checksum || '',
+      uploadSizeBytes: integrity?.sizeBytes || 0,
+      uploadMimeType: integrity?.mimeType || '',
       battleId: battle._id
     });
 
@@ -400,21 +453,21 @@ exports.vote = async (req, res) => {
       return res.status(400).json({ message: 'Invalid votedFor user id' });
     }
 
-    const battle = await Battle.findById(battleId);
+    let battle = await Battle.findById(battleId);
 
     if (!battle) {
       return res.status(404).json({ message: 'Battle not found' });
     }
 
-    if (battle.status !== 'voting') {
+    battle = await syncBattleLifecycle(battle);
+
+    if (!['active', 'voting'].includes(battle.status)) {
       return res.status(400).json({ message: 'Battle is not in voting phase' });
     }
 
     // Vérifier si la période de vote est terminée
     if (battle.isVotingExpired()) {
-      // Auto-clôturer
-      const completedBattle = await battle.calculateWinner();
-      await applyBattleOutcomeStats(completedBattle || battle);
+      await syncBattleLifecycle(battle);
       return res.status(400).json({ message: 'La période de vote est terminée' });
     }
 
@@ -438,7 +491,7 @@ exports.vote = async (req, res) => {
     const updatedBattle = await Battle.findOneAndUpdate(
       {
         _id: battleId,
-        status: 'voting',
+        status: { $in: ['active', 'voting'] },
         'votes.user': { $ne: req.user._id }
       },
       {
@@ -532,34 +585,22 @@ exports.closeExpiredBattles = async () => {
   });
 
   for (const battle of forfeitBattles) {
-    const allSubmitted = battle.entries.every(e => e.videoUrl);
-    if (!allSubmitted) {
-      battle.status = 'forfeited';
-      // Le participant qui a soumis gagne par forfait
-      const submitter = battle.entries.find(e => e.videoUrl);
-      if (submitter) {
-        battle.winner = submitter.user;
-      }
-      await battle.save();
-      if (battle.winner) {
-        await applyBattleOutcomeStats(battle);
-        // GOMDE D'OR : mettre à jour les scores
-        await updateScoresFromBattle(battle);
-      }
+    const syncedBattle = await syncBattleLifecycle(battle);
+    if (syncedBattle?.status === 'forfeited' && syncedBattle.winner) {
+      await updateScoresFromBattle(syncedBattle);
     }
   }
 
   // Vote deadline: battles actives dont la période de vote est terminée
   const expiredVoteBattles = await Battle.find({
-    status: 'voting',
+    status: { $in: ['active', 'voting'] },
     voteDeadline: { $lte: now }
   });
 
   for (const battle of expiredVoteBattles) {
-    await battle.calculateWinner();
-    await applyBattleOutcomeStats(battle);
+    const finalizedBattle = await syncBattleLifecycle(battle);
     // GOMDE D'OR : mettre à jour les scores
-    await updateScoresFromBattle(battle);
+    await updateScoresFromBattle(finalizedBattle || battle);
   }
 
   return {

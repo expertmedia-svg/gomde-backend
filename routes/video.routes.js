@@ -10,7 +10,8 @@ const {
   incrementVideoView,
   likeVideo,
   commentVideo,
-  shareVideo
+  shareVideo,
+  deleteVideo
 } = require('../controllers/video.controller');
 
 // Rate limit for view increment: 5 per minute per IP per video
@@ -31,5 +32,6 @@ router.post('/:id/view', viewLimiter, incrementVideoView);
 router.post('/:id/like', protect, likeVideo);
 router.post('/:id/comment', protect, commentVideo);
 router.post('/:id/share', protect, shareVideo);
+router.delete('/:id', protect, deleteVideo);
 
 module.exports = router;

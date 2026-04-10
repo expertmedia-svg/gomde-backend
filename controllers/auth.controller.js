@@ -1,6 +1,7 @@
 const User = require('../models/user');
 const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
+const { buildDisciplinePayload } = require('../constants/disciplines');
 const { normalizeBurkinaProfile } = require('../services/location.service');
 
 const generateToken = (id) => {
@@ -9,6 +10,18 @@ const generateToken = (id) => {
   });
 };
 
+const serializeUser = (user) => ({
+  id: user._id,
+  username: user.username,
+  email: user.email,
+  role: user.role,
+  profile: user.profile,
+  stats: user.stats,
+  verified: user.verified,
+  primaryDiscipline: user.primaryDiscipline,
+  disciplines: user.disciplines,
+});
+
 exports.register = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -16,8 +29,23 @@ exports.register = async (req, res) => {
       return res.status(400).json({ errors: errors.array() });
     }
 
-    const { username, email, password, role, city, neighborhood, region } = req.body;
+    const {
+      username,
+      email,
+      password,
+      role,
+      city,
+      neighborhood,
+      region,
+      primaryDiscipline,
+      disciplines,
+    } = req.body;
     const normalizedRole = (role === 'artist') ? 'artist' : 'user';
+    const disciplinePayload = buildDisciplinePayload(
+      Array.isArray(disciplines) && disciplines.length > 0
+        ? disciplines
+        : primaryDiscipline
+    );
 
     const userExists = await User.findOne({ $or: [{ email }, { username }] });
     if (userExists) {
@@ -31,7 +59,9 @@ exports.register = async (req, res) => {
       email,
       password,
       role: normalizedRole,
-      profile
+      profile,
+      primaryDiscipline: disciplinePayload.primaryCategory,
+      disciplines: disciplinePayload.categories,
     });
 
     const token = generateToken(user._id);
@@ -39,14 +69,7 @@ exports.register = async (req, res) => {
     res.status(201).json({
       success: true,
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        profile: user.profile,
-        stats: user.stats
-      }
+      user: serializeUser(user)
     });
   } catch (error) {
     if (error?.message?.includes('Ville') || error?.message?.includes('Région') || error?.message?.includes('quartier')) {
@@ -79,15 +102,7 @@ exports.login = async (req, res) => {
     res.json({
       success: true,
       token,
-      user: {
-        id: user._id,
-        username: user.username,
-        email: user.email,
-        role: user.role,
-        profile: user.profile,
-        stats: user.stats,
-        verified: user.verified
-      }
+      user: serializeUser(user)
     });
   } catch (error) {
     console.error(error);
@@ -111,7 +126,7 @@ exports.getMe = async (req, res) => {
 
 exports.updateProfile = async (req, res) => {
   try {
-    const allowedUpdates = ['profile', 'username'];
+    const allowedUpdates = ['profile', 'username', 'primaryDiscipline', 'disciplines'];
     const updates = {};
     
     Object.keys(req.body).forEach(key => {
@@ -139,6 +154,16 @@ exports.updateProfile = async (req, res) => {
         avatar: updates.profile.avatar ?? currentUser.profile?.avatar,
         socialLinks: updates.profile.socialLinks ?? currentUser.profile?.socialLinks,
       };
+    }
+
+    if (updates.primaryDiscipline !== undefined || updates.disciplines !== undefined) {
+      const disciplinePayload = buildDisciplinePayload(
+        Array.isArray(updates.disciplines) && updates.disciplines.length > 0
+          ? updates.disciplines
+          : updates.primaryDiscipline
+      );
+      updates.primaryDiscipline = disciplinePayload.primaryCategory;
+      updates.disciplines = disciplinePayload.categories;
     }
     
     const user = await User.findByIdAndUpdate(
