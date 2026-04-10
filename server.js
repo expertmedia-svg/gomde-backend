@@ -4,6 +4,7 @@ const cors = require('cors');
 const helmet = require('helmet');
 const compression = require('compression');
 const morgan = require('morgan');
+const crypto = require('crypto');
 const dotenv = require('dotenv');
 const http = require('http');
 const { Server } = require('socket.io');
@@ -70,6 +71,7 @@ const io = new Server(server, {
   cors: corsOptions
 });
 app.set('io', io);
+app.set('trust proxy', 1);
 
 const rateLimit = require('express-rate-limit');
 
@@ -84,10 +86,20 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
-// Global rate limiter — 200 requests per minute per IP
+// Global rate limiter — keyed by bearer token when available, fallback to IP.
 const globalLimiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 200,
+  max: 1200,
+  keyGenerator: (req) => {
+    const authHeader = req.get('authorization');
+    if (authHeader && authHeader.startsWith('Bearer ')) {
+      return `bearer:${crypto
+        .createHash('sha1')
+        .update(authHeader.slice(7))
+        .digest('hex')}`;
+    }
+    return req.ip;
+  },
   standardHeaders: true,
   legacyHeaders: false,
   message: { message: 'Too many requests, please try again later.' }

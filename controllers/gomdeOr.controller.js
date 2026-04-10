@@ -17,17 +17,19 @@ async function getOrCreateEdition(year = CURRENT_YEAR) {
   return edition;
 }
 
+function syncEditionState(edition) {
+  const now = new Date();
+  if (edition.status === 'upcoming' && now >= edition.registrationStart) {
+    edition.status = 'registration';
+  }
+  edition.calculateRankings();
+}
+
 // ── GET /gomde-or — Infos de l'édition courante ─────────────────────
 exports.getEdition = async (req, res) => {
   try {
     const edition = await getOrCreateEdition();
-
-    // Auto-update du status selon la date
-    const now = new Date();
-    if (edition.status === 'upcoming' && now >= edition.registrationStart) {
-      edition.status = 'registration';
-      await edition.save();
-    }
+    syncEditionState(edition);
 
     const totalParticipants = edition.entries.length;
     const provinces = {};
@@ -63,6 +65,7 @@ exports.getLeaderboard = async (req, res) => {
   try {
     const { province, city, neighborhood, limit = 50, page = 1 } = req.query;
     const edition = await getOrCreateEdition();
+    syncEditionState(edition);
 
     let filtered = [...edition.entries];
 
@@ -133,6 +136,7 @@ exports.getLeaderboard = async (req, res) => {
 exports.getMyEntry = async (req, res) => {
   try {
     const edition = await getOrCreateEdition();
+    syncEditionState(edition);
     const entry = edition.entries.find(
       (e) => e.user.toString() === req.user.id
     );
@@ -297,6 +301,7 @@ exports.updateScoresFromBattle = async (battle) => {
 exports.getProvinceResults = async (req, res) => {
   try {
     const edition = await getOrCreateEdition();
+    syncEditionState(edition);
 
     // Regrouper par province
     const byProvince = {};
@@ -348,6 +353,7 @@ exports.getProvinceResults = async (req, res) => {
 exports.getTrophies = async (req, res) => {
   try {
     const edition = await getOrCreateEdition();
+    syncEditionState(edition);
 
     const allTrophies = [];
     const userIds = [];
