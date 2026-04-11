@@ -66,7 +66,17 @@ const normalizeDisciplineList = (value, { fallback = [] } = {}) => {
     return normalized;
   }
 
-  return normalizeDisciplineList(fallback, { fallback: [] });
+  const fallbackValues = Array.isArray(fallback)
+    ? fallback.filter(Boolean)
+    : fallback == null
+    ? []
+    : [fallback];
+
+  if (fallbackValues.length === 0) {
+    return [];
+  }
+
+  return normalizeDisciplineList(fallbackValues, { fallback: [] });
 };
 
 const buildDisciplinePayload = (input, { fallback = [DEFAULT_DISCIPLINE_SLUG] } = {}) => {
