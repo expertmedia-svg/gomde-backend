@@ -46,6 +46,22 @@ const userSchema = new mongoose.Schema({
       type: String,
       default: '/public/assets/gomde-logo.png'
     },
+    coverImage: {
+      type: String,
+      default: ''
+    },
+    mediaLayout: {
+      avatar: {
+        positionX: { type: Number, default: 50 },
+        positionY: { type: Number, default: 50 },
+        scale: { type: Number, default: 1 },
+      },
+      cover: {
+        positionX: { type: Number, default: 50 },
+        positionY: { type: Number, default: 50 },
+        scale: { type: Number, default: 1 },
+      },
+    },
     city: String,
     neighborhood: String,
     region: String,
@@ -70,6 +86,21 @@ const userSchema = new mongoose.Schema({
     totalShares: { type: Number, default: 0 },
     totalBattleVotes: { type: Number, default: 0 }
   },
+  savedContent: [{
+    targetType: {
+      type: String,
+      enum: ['video', 'audio'],
+      required: true,
+    },
+    targetId: {
+      type: mongoose.Schema.Types.ObjectId,
+      required: true,
+    },
+    savedAt: {
+      type: Date,
+      default: Date.now,
+    },
+  }],
   wallet: {
     balance: { type: Number, default: 0 },
     lifetimeEarned: { type: Number, default: 0 },

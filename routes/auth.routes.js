@@ -4,6 +4,7 @@ const { body } = require('express-validator');
 const rateLimit = require('express-rate-limit');
 const { register, login, getMe, updateProfile } = require('../controllers/auth.controller');
 const { protect } = require('../middleware/auth');
+const { uploadProfileMediaWithLogging } = require('../middleware/upload');
 
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
@@ -31,6 +32,6 @@ router.post('/login', authLimiter, [
 ], login);
 
 router.get('/me', protect, getMe);
-router.put('/profile', protect, updateProfile);
+router.put('/profile', protect, uploadProfileMediaWithLogging, updateProfile);
 
 module.exports = router;

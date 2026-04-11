@@ -1,9 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const mongoose = require('mongoose');
 const { protect } = require('../middleware/auth');
 const { buildRouteCache } = require('../middleware/cache');
 const { buildActionLimiter } = require('../middleware/traffic');
 const User = require('../models/user');
+const Video = require('../models/video');
+const AudioTrack = require('../models/audiotrack');
 const {
   normalizeLocationKey,
   resolveRegionFromCity,
@@ -11,6 +14,7 @@ const {
 const { buildDisciplinePayload } = require('../constants/disciplines');
 const { getChampionForLeaderboard } = require('../services/champion.service');
 const { calculateOfficialScore } = require('../services/score.service');
+const { toPublicMediaUrl } = require('../services/mediaStorage.service');
 
 const resolveUserRegion = (user) => {
   const profile = user.profile || {};
@@ -52,6 +56,190 @@ const followLimiter = buildActionLimiter({
   prefix: 'user-follow',
   paramName: 'id',
 });
+
+const favoritesLimiter = buildActionLimiter({
+  windowMs: 60 * 1000,
+  max: 60,
+  prefix: 'user-favorites',
+});
+
+const compactFavoriteUser = (user) => {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    _id: user._id,
+    id: String(user._id),
+    username: user.username || 'Artiste',
+    primaryDiscipline: user.primaryDiscipline || null,
+    city: user.profile?.city || null,
+    region: user.profile?.region || null,
+    profile: {
+      avatar: user.profile?.avatar || '',
+      city: user.profile?.city || null,
+      region: user.profile?.region || null,
+    },
+  };
+};
+
+const compactCommentUser = (user) => {
+  if (!user) {
+    return null;
+  }
+
+  return {
+    _id: user._id,
+    id: String(user._id),
+    username: user.username || 'Communauté',
+    profile: {
+      avatar: user.profile?.avatar || '',
+    },
+  };
+};
+
+const buildSavedVideoItem = (req, video) => ({
+  _id: video._id,
+  id: String(video._id),
+  targetType: 'video',
+  title: video.title || 'Sans titre',
+  description: video.description || '',
+  videoUrl: toPublicMediaUrl(req, video.videoUrl),
+  thumbnailUrl: toPublicMediaUrl(req, video.thumbnailUrl),
+  user: compactFavoriteUser(video.user),
+  likes: Array.isArray(video.likes) ? video.likes : [],
+  comments: Array.isArray(video.comments)
+    ? video.comments.map((comment) => ({
+        ...comment,
+        _id: comment._id,
+        user: compactCommentUser(comment.user),
+      }))
+    : [],
+  shares: Number(video.shares || 0),
+  views: Number(video.views || 0),
+  type: video.type || 'freestyle',
+  primaryCategory: video.primaryCategory || null,
+  categories: Array.isArray(video.categories) ? video.categories : [],
+  battleId: video.battleId ? String(video.battleId) : null,
+  isAudio: false,
+  createdAt: video.createdAt,
+});
+
+const buildSavedAudioItem = (req, recording) => ({
+  _id: recording._id,
+  id: String(recording._id),
+  targetType: 'audio',
+  title: recording.title || 'Sans titre',
+  description:
+    recording.description ||
+    `${recording.title || 'Enregistrement'} - ${recording.artist || recording.user?.username || 'Artiste'}`,
+  videoUrl: toPublicMediaUrl(req, recording.audioUrl),
+  thumbnailUrl: recording.coverImageUrl
+    ? toPublicMediaUrl(req, recording.coverImageUrl)
+    : toPublicMediaUrl(req, '/public/assets/gomde-logo.png'),
+  user: compactFavoriteUser(recording.user),
+  likes: Array.isArray(recording.likes) ? recording.likes : [],
+  comments: Array.isArray(recording.comments)
+    ? recording.comments.map((comment) => ({
+        ...comment,
+        _id: comment._id,
+        user: compactCommentUser(comment.user),
+      }))
+    : [],
+  shares: Number(recording.shares || 0),
+  views: Number(recording.plays || 0),
+  type: 'audio',
+  primaryCategory: recording.primaryCategory || null,
+  categories: Array.isArray(recording.categories) ? recording.categories : [],
+  isAudio: true,
+  sourceType: 'gomdezik',
+  createdAt: recording.createdAt,
+});
+
+const buildSavedContentFeed = async (req, savedContent = []) => {
+  const orderedEntries = Array.isArray(savedContent)
+    ? [...savedContent]
+        .filter((entry) => entry?.targetType && entry?.targetId)
+        .sort((left, right) => new Date(right.savedAt).getTime() - new Date(left.savedAt).getTime())
+    : [];
+
+  const videoIds = orderedEntries
+    .filter((entry) => entry.targetType === 'video')
+    .map((entry) => entry.targetId);
+  const audioIds = orderedEntries
+    .filter((entry) => entry.targetType === 'audio')
+    .map((entry) => entry.targetId);
+
+  const [videos, recordings] = await Promise.all([
+    videoIds.length
+      ? Video.find({ _id: { $in: videoIds }, isPublished: true })
+          .populate('user', 'username primaryDiscipline profile.avatar profile.city profile.region')
+          .populate('comments.user', 'username profile.avatar')
+          .lean()
+      : [],
+    audioIds.length
+      ? AudioTrack.find({
+          _id: { $in: audioIds },
+          instrumental: false,
+          shareToCommunity: true,
+          isPublic: true,
+        })
+          .populate('user', 'username primaryDiscipline profile.avatar profile.city profile.region')
+          .populate('comments.user', 'username profile.avatar')
+          .lean()
+      : [],
+  ]);
+
+  const videosById = new Map(videos.map((video) => [String(video._id), buildSavedVideoItem(req, video)]));
+  const recordingsById = new Map(
+    recordings.map((recording) => [String(recording._id), buildSavedAudioItem(req, recording)])
+  );
+
+  return orderedEntries
+    .map((entry) => {
+      const key = String(entry.targetId);
+      const item = entry.targetType === 'audio'
+        ? recordingsById.get(key)
+        : videosById.get(key);
+
+      if (!item) {
+        return null;
+      }
+
+      return {
+        ...item,
+        savedAt: entry.savedAt,
+      };
+    })
+    .filter(Boolean);
+};
+
+const normalizeSavedContentEntries = (rawEntries) => {
+  if (!Array.isArray(rawEntries)) {
+    return [];
+  }
+
+  const seen = new Set();
+  return rawEntries
+    .map((entry) => {
+      const rawType = typeof entry?.targetType === 'string' ? entry.targetType.trim().toLowerCase() : '';
+      const targetType = rawType === 'audio' ? 'audio' : rawType === 'video' ? 'video' : '';
+      const targetId = typeof entry?.targetId === 'string' ? entry.targetId.trim() : '';
+
+      if (!targetType || !targetId || !mongoose.Types.ObjectId.isValid(targetId)) {
+        return null;
+      }
+
+      const dedupeKey = `${targetType}:${targetId}`;
+      if (seen.has(dedupeKey)) {
+        return null;
+      }
+      seen.add(dedupeKey);
+
+      return { targetType, targetId };
+    })
+    .filter(Boolean);
+};
 
 router.get('/', protect, buildRouteCache({ ttlMs: 10000 }), async (req, res) => {
   try {
@@ -193,6 +381,150 @@ router.get('/leaderboard', protect, buildRouteCache({ ttlMs: 15000 }), async (re
         region: region || null,
       },
     });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.get('/me/favorites', protect, buildRouteCache({ ttlMs: 5000 }), async (req, res) => {
+  try {
+    const user = await User.findById(req.user._id).select('savedContent');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const items = await buildSavedContentFeed(req, user.savedContent);
+
+    res.json({ items, total: items.length });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.post('/me/favorites/toggle', protect, favoritesLimiter, async (req, res) => {
+  try {
+    const rawType = typeof req.body?.targetType === 'string' ? req.body.targetType.trim().toLowerCase() : '';
+    const targetType = rawType === 'audio' ? 'audio' : rawType === 'video' ? 'video' : '';
+    const targetId = typeof req.body?.targetId === 'string' ? req.body.targetId.trim() : '';
+
+    if (!targetType || !targetId) {
+      return res.status(400).json({ message: 'targetType and targetId are required' });
+    }
+
+    if (!mongoose.Types.ObjectId.isValid(targetId)) {
+      return res.status(400).json({ message: 'Invalid targetId' });
+    }
+
+    const targetExists = targetType === 'audio'
+      ? await AudioTrack.exists({
+          _id: targetId,
+          instrumental: false,
+          shareToCommunity: true,
+          isPublic: true,
+        })
+      : await Video.exists({ _id: targetId, isPublished: true });
+
+    if (!targetExists) {
+      return res.status(404).json({ message: 'Content not found' });
+    }
+
+    const user = await User.findById(req.user._id).select('savedContent');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const existingIndex = user.savedContent.findIndex(
+      (entry) => entry.targetType === targetType && String(entry.targetId) === targetId
+    );
+
+    let saved = false;
+    if (existingIndex >= 0) {
+      user.savedContent.splice(existingIndex, 1);
+    } else {
+      user.savedContent.unshift({ targetType, targetId });
+      saved = true;
+    }
+
+    await user.save();
+
+    const items = await buildSavedContentFeed(req, user.savedContent);
+
+    res.json({ saved, total: items.length, items });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+router.post('/me/favorites/import', protect, favoritesLimiter, async (req, res) => {
+  try {
+    const normalizedEntries = normalizeSavedContentEntries(req.body?.items);
+    const user = await User.findById(req.user._id).select('savedContent');
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    if (!normalizedEntries.length) {
+      const items = await buildSavedContentFeed(req, user.savedContent);
+      return res.json({ importedCount: 0, total: items.length, items });
+    }
+
+    const videoIds = normalizedEntries
+      .filter((entry) => entry.targetType === 'video')
+      .map((entry) => entry.targetId);
+    const audioIds = normalizedEntries
+      .filter((entry) => entry.targetType === 'audio')
+      .map((entry) => entry.targetId);
+
+    const [validVideos, validAudios] = await Promise.all([
+      videoIds.length
+        ? Video.find({ _id: { $in: videoIds }, isPublished: true }).select('_id').lean()
+        : [],
+      audioIds.length
+        ? AudioTrack.find({
+            _id: { $in: audioIds },
+            instrumental: false,
+            shareToCommunity: true,
+            isPublic: true,
+          })
+            .select('_id')
+            .lean()
+        : [],
+    ]);
+
+    const validKeys = new Set([
+      ...validVideos.map((entry) => `video:${String(entry._id)}`),
+      ...validAudios.map((entry) => `audio:${String(entry._id)}`),
+    ]);
+    const existingKeys = new Set(
+      (user.savedContent || []).map(
+        (entry) => `${entry.targetType}:${String(entry.targetId)}`
+      )
+    );
+
+    let importedCount = 0;
+    for (const entry of normalizedEntries) {
+      const key = `${entry.targetType}:${entry.targetId}`;
+      if (!validKeys.has(key) || existingKeys.has(key)) {
+        continue;
+      }
+
+      user.savedContent.unshift(entry);
+      existingKeys.add(key);
+      importedCount += 1;
+    }
+
+    if (importedCount > 0) {
+      await user.save();
+    }
+
+    const items = await buildSavedContentFeed(req, user.savedContent);
+    res.json({ importedCount, total: items.length, items });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

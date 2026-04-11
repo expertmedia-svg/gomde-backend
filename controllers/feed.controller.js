@@ -8,55 +8,72 @@ exports.getSmartFeed = async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
     const parsedPage = Math.max(1, parseInt(page) || 1);
     const parsedLimit = Math.min(50, Math.max(1, parseInt(limit) || 10));
+    const recentWindowStart = new Date(Date.now() - (1000 * 60 * 60 * 24 * 10));
+    const candidateLimit = Math.min(120, Math.max(parsedLimit * 4, 24));
     
     // Get user's location if available
     const userLocation = req.user?.profile?.city;
     
-    // Paginated query sorted by recency + popularity via aggregation
-    const skip = (parsedPage - 1) * parsedLimit;
-    
-    const videos = await Video.find({ isPublished: true })
+    // Pour toi is intentionally biased toward fresh and relevant content instead of raw popularity.
+    const candidateVideos = await Video.find({
+      isPublished: true,
+      createdAt: { $gte: recentWindowStart },
+    })
       .populate('user', 'username profile.avatar stats.score profile.city')
       .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parsedLimit)
+      .limit(candidateLimit)
       .lean();
+
+    const videos = candidateVideos.length >= parsedLimit
+      ? candidateVideos
+      : await Video.find({ isPublished: true })
+        .populate('user', 'username profile.avatar stats.score profile.city')
+        .sort({ createdAt: -1 })
+        .limit(candidateLimit)
+        .lean();
     
     const totalVideos = await Video.countDocuments({ isPublished: true });
     
-    // Calculate score for each video (already paginated)
+    // Calculate personalized score and then paginate after ranking so the order differs from Tendance.
     const scoredVideos = videos.map(video => {
       const likes = Array.isArray(video.likes) ? video.likes.length : 0;
       const views = video.views || 0;
       const comments = Array.isArray(video.comments) ? video.comments.length : 0;
       const shares = video.shares || 0;
       
-      const battleBoost = video.battleId ? 50 : 0;
+      const battleBoost = video.battleId ? 90 : 0;
       const hoursSinceCreation = (Date.now() - new Date(video.createdAt)) / (1000 * 60 * 60);
-      const freshnessBoost = Math.max(0, 100 - hoursSinceCreation * 2);
+      const freshnessBoost = Math.max(0, 220 - hoursSinceCreation * 7);
       const totalInteractions = likes + comments + shares;
       const engagementRate = views > 0 ? (totalInteractions / views) * 100 : 0;
+      const creatorScore = Number(video.user?.stats?.score || 0);
+      const creatorBoost = Math.min(28, creatorScore / 80);
+      const trendingPenalty = Math.min(65, views / 180);
       
       let locationBoost = 0;
       if (userLocation && video.user?.profile?.city === userLocation) {
-        locationBoost = 30;
+        locationBoost = 70;
       }
       
       const score = 
-        (likes * 4) +
-        (views * 0.3) +
-        (comments * 5) +
-        (shares * 6) +
+        (likes * 3.2) +
+        (views * 0.04) +
+        (comments * 7) +
+        (shares * 9) +
         battleBoost +
         freshnessBoost +
-        (engagementRate * 2) +
-        locationBoost;
+        (engagementRate * 3.5) +
+        creatorBoost +
+        locationBoost -
+        trendingPenalty;
       
       return { ...video, score };
     });
     
     // Sort page by score
     scoredVideos.sort((a, b) => b.score - a.score);
+    const skip = (parsedPage - 1) * parsedLimit;
+    const rankedPage = scoredVideos.slice(skip, skip + parsedLimit);
     
     // Mix content types
     const battles = await Battle.find({ status: { $in: ['voting', 'active'] } })
@@ -66,7 +83,7 @@ exports.getSmartFeed = async (req, res) => {
       .lean();
     
     // Ensure all video URLs are absolute
-    const enrichedVideos = scoredVideos.map(video => ({
+    const enrichedVideos = rankedPage.map(video => ({
       ...video,
       videoUrl: toPublicMediaUrl(req, video.videoUrl),
       thumbnailUrl: toPublicMediaUrl(req, video.thumbnailUrl)

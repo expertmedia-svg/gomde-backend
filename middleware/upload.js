@@ -162,6 +162,15 @@ const uploadImage = multer({
   limits: { fileSize: 5 * 1024 * 1024 }
 });
 
+const uploadProfileMedia = multer({
+  storage: imageStorage,
+  fileFilter: imageFilter,
+  limits: { fileSize: 5 * 1024 * 1024 },
+}).fields([
+  { name: 'avatar', maxCount: 1 },
+  { name: 'cover', maxCount: 1 },
+]);
+
 // Middleware wrapper to log successful uploads
 const logUploadSuccess = (fieldName) => (req, res, next) => {
   if (req.file) {
@@ -183,12 +192,28 @@ const logUploadSuccess = (fieldName) => (req, res, next) => {
   next();
 };
 
+const logFieldUploadSuccess = (fieldNames) => (req, res, next) => {
+  fieldNames.forEach((fieldName) => {
+    const file = req.files?.[fieldName]?.[0];
+    if (!file) {
+      return;
+    }
+
+    const uploadPath = path.join(file.destination, file.filename);
+    console.log(`[Upload Success] Type: ${fieldName}, File: ${file.filename}, Size: ${file.size} bytes, MIME: ${file.mimetype}, Path: ${uploadPath}`);
+  });
+
+  next();
+};
+
 // Enhanced exports with logging middleware
 module.exports = {
   uploadVideo,
   uploadAudio,
   uploadImage,
+  uploadProfileMedia,
   uploadVideoWithLogging: [uploadVideo.single('video'), logUploadSuccess('video')],
   uploadAudioWithLogging: [uploadAudio.single('audio'), logUploadSuccess('audio')],
-  uploadImageWithLogging: [uploadImage.single('cover'), logUploadSuccess('cover')]
+  uploadImageWithLogging: [uploadImage.single('cover'), logUploadSuccess('cover')],
+  uploadProfileMediaWithLogging: [uploadProfileMedia, logFieldUploadSuccess(['avatar', 'cover'])],
 };
