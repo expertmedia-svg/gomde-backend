@@ -70,6 +70,12 @@ const userSchema = new mongoose.Schema({
     totalShares: { type: Number, default: 0 },
     totalBattleVotes: { type: Number, default: 0 }
   },
+  wallet: {
+    balance: { type: Number, default: 0 },
+    lifetimeEarned: { type: Number, default: 0 },
+    pendingBalance: { type: Number, default: 0 },
+    lastRewardAt: { type: Date, default: null }
+  },
   verified: {
     type: Boolean,
     default: false

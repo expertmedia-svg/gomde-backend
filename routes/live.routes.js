@@ -2,13 +2,15 @@ const express = require('express');
 const mongoose = require('mongoose');
 const { AccessToken } = require('livekit-server-sdk');
 const { protect } = require('../middleware/auth');
+const { buildRouteCache } = require('../middleware/cache');
+const { toPublicMediaUrl } = require('../services/mediaStorage.service');
 const Battle = require('../models/battle');
 const User = require('../models/user');
 
 const router = express.Router();
 
 // ── GET /api/live/arena — Feed des battles en arène (voting + active) ──
-router.get('/arena', async (req, res) => {
+router.get('/arena', buildRouteCache({ ttlMs: 10000 }), async (req, res) => {
   try {
     const { page = 1, limit = 20, status } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
@@ -34,7 +36,6 @@ router.get('/arena', async (req, res) => {
     const total = await Battle.countDocuments(query);
 
     // Calculer les infos de vote pour chaque battle
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
     const enriched = battles.map((battle) => {
       const voteBreakdown = {};
       battle.entries.forEach((entry) => {
@@ -50,12 +51,8 @@ router.get('/arena', async (req, res) => {
 
       // Abs URLs pour les vidéos
       battle.entries.forEach((entry) => {
-        if (entry.videoUrl && !entry.videoUrl.startsWith('http')) {
-          entry.videoUrl = `${baseUrl}${entry.videoUrl}`;
-        }
-        if (entry.thumbnailUrl && !entry.thumbnailUrl.startsWith('http')) {
-          entry.thumbnailUrl = `${baseUrl}${entry.thumbnailUrl}`;
-        }
+        entry.videoUrl = toPublicMediaUrl(req, entry.videoUrl);
+        entry.thumbnailUrl = toPublicMediaUrl(req, entry.thumbnailUrl);
       });
 
       return {
@@ -81,7 +78,7 @@ router.get('/arena', async (req, res) => {
 });
 
 // ── GET /api/live/arena/:id — Détail d'un battle dans l'arène ───────
-router.get('/arena/:id', async (req, res) => {
+router.get('/arena/:id', buildRouteCache({ ttlMs: 8000 }), async (req, res) => {
   try {
     const battleId = req.params.id?.trim();
     if (!mongoose.isValidObjectId(battleId)) {
@@ -100,14 +97,9 @@ router.get('/arena/:id', async (req, res) => {
       return res.status(404).json({ message: 'Battle introuvable' });
     }
 
-    const baseUrl = `${req.protocol}://${req.get('host')}`;
     battle.entries.forEach((entry) => {
-      if (entry.videoUrl && !entry.videoUrl.startsWith('http')) {
-        entry.videoUrl = `${baseUrl}${entry.videoUrl}`;
-      }
-      if (entry.thumbnailUrl && !entry.thumbnailUrl.startsWith('http')) {
-        entry.thumbnailUrl = `${baseUrl}${entry.thumbnailUrl}`;
-      }
+      entry.videoUrl = toPublicMediaUrl(req, entry.videoUrl);
+      entry.thumbnailUrl = toPublicMediaUrl(req, entry.thumbnailUrl);
     });
 
     const voteBreakdown = {};

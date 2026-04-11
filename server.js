@@ -245,6 +245,9 @@ const adminRoutes = require('./routes/admin.routes');
 const studioRoutes = require('./routes/studio.routes');
 const liveRoutes = require('./routes/live.routes');
 const gomdeOrRoutes = require('./routes/gomdeOr.routes');
+const gocoRoutes = require('./routes/goco.routes');
+const socialRoutes = require('./routes/social.routes');
+const { storageSummary } = require('./services/mediaStorage.service');
 
 // Health check
 app.get('/', (req, res) => {
@@ -377,6 +380,8 @@ app.use('/api/admin', adminRoutes);
 app.use('/api/studio', studioRoutes);
 app.use('/api/live', liveRoutes);
 app.use('/api/gomde-or', gomdeOrRoutes);
+app.use('/api/goco', gocoRoutes);
+app.use('/api/social', socialRoutes);
 
 // Socket.io for live battles
 require('./sockets/liveBattle.socket')(io);
@@ -394,10 +399,11 @@ app.use((err, req, res, next) => {
 mongoose.connect(process.env.MONGODB_URI, {
   useNewUrlParser: true,
   useUnifiedTopology: true,
-  maxPoolSize: 10,
-  minPoolSize: 2,
-  serverSelectionTimeoutMS: 5000,
-  socketTimeoutMS: 45000,
+  maxPoolSize: Math.max(10, Number(process.env.MONGODB_MAX_POOL_SIZE) || 60),
+  minPoolSize: Math.max(1, Number(process.env.MONGODB_MIN_POOL_SIZE) || 5),
+  serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
+  socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000,
+  maxIdleTimeMS: Number(process.env.MONGODB_MAX_IDLE_TIME_MS) || 30000,
 })
 .then(() => console.log('MongoDB connected successfully'))
 .catch((err) => {
@@ -422,6 +428,44 @@ app.get('/api/health', (req, res) => {
     db: dbStatus[dbState] || 'unknown',
     uptime: process.uptime(),
     timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/api/health/capacity', (req, res) => {
+  const memoryUsage = process.memoryUsage();
+  const dbState = mongoose.connection.readyState;
+
+  res.status(200).json({
+    status: dbState === 1 ? 'ok' : 'degraded',
+    uptimeSeconds: Math.round(process.uptime()),
+    pid: process.pid,
+    memory: {
+      rssMb: Math.round((memoryUsage.rss / 1024 / 1024) * 10) / 10,
+      heapUsedMb: Math.round((memoryUsage.heapUsed / 1024 / 1024) * 10) / 10,
+      heapTotalMb: Math.round((memoryUsage.heapTotal / 1024 / 1024) * 10) / 10,
+    },
+    database: {
+      state: dbState,
+      status: { 0: 'disconnected', 1: 'connected', 2: 'connecting', 3: 'disconnecting' }[dbState] || 'unknown',
+      pool: {
+        maxPoolSize: Math.max(10, Number(process.env.MONGODB_MAX_POOL_SIZE) || 60),
+        minPoolSize: Math.max(1, Number(process.env.MONGODB_MIN_POOL_SIZE) || 5),
+      },
+    },
+    traffic: {
+      apiLimiterPerMinute: 1200,
+      uploadsServedLocally: true,
+      note: 'Pour 100k utilisateurs simultanes, prevoir CDN + object storage + cache distribue en frontal.',
+    },
+    storage: storageSummary(req),
+    timestamp: new Date().toISOString(),
+  });
+});
+
+app.get('/api/health/storage', (req, res) => {
+  res.json({
+    storage: storageSummary(req),
+    timestamp: new Date().toISOString(),
   });
 });
 

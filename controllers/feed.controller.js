@@ -1,19 +1,7 @@
 const Video = require('../models/video');
 const Battle = require('../models/battle');
 const AudioTrack = require('../models/audiotrack');
-
-// Helper to get correct protocol (handles nginx reverse proxy)
-const getRequestProtocol = (req) => {
-  // Use x-forwarded-proto header from reverse proxy (nginx sets this)
-  const forwardedProto = req.get('x-forwarded-proto');
-  if (forwardedProto) return forwardedProto;
-  
-  // Fallback: force https in production, req.protocol for local dev
-  if (process.env.NODE_ENV === 'production') {
-    return 'https';
-  }
-  return req.protocol || 'https';
-};
+const { toPublicMediaUrl } = require('../services/mediaStorage.service');
 
 exports.getSmartFeed = async (req, res) => {
   try {
@@ -78,18 +66,10 @@ exports.getSmartFeed = async (req, res) => {
       .lean();
     
     // Ensure all video URLs are absolute
-    const protocol = getRequestProtocol(req);
-    const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
-    const baseUrl = `${protocol}://${host}`;
-    
     const enrichedVideos = scoredVideos.map(video => ({
       ...video,
-      videoUrl: video.videoUrl?.startsWith('http') 
-        ? video.videoUrl 
-        : `${baseUrl}${video.videoUrl}`,
-      thumbnailUrl: video.thumbnailUrl && !video.thumbnailUrl.startsWith('http')
-        ? `${baseUrl}${video.thumbnailUrl}`
-        : video.thumbnailUrl
+      videoUrl: toPublicMediaUrl(req, video.videoUrl),
+      thumbnailUrl: toPublicMediaUrl(req, video.thumbnailUrl)
     }));
     
     res.json({
@@ -117,18 +97,10 @@ exports.getTrending = async (req, res) => {
       .lean();
     
     // Ensure all video URLs are absolute
-    const protocol = getRequestProtocol(req);
-    const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
-    const baseUrl = `${protocol}://${host}`;
-    
     const enrichedVideos = videos.map(video => ({
       ...video,
-      videoUrl: video.videoUrl && !video.videoUrl.startsWith('http')
-        ? `${baseUrl}${video.videoUrl}`
-        : video.videoUrl,
-      thumbnailUrl: video.thumbnailUrl && !video.thumbnailUrl.startsWith('http')
-        ? `${baseUrl}${video.thumbnailUrl}`
-        : video.thumbnailUrl
+      videoUrl: toPublicMediaUrl(req, video.videoUrl),
+      thumbnailUrl: toPublicMediaUrl(req, video.thumbnailUrl)
     }));
 
     const total = await Video.countDocuments({ isPublished: true });
@@ -174,18 +146,10 @@ exports.getLocalContent = async (req, res) => {
     ]);
 
     // Ensure all video URLs are absolute
-    const protocol = getRequestProtocol(req);
-    const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
-    const baseUrl = `${protocol}://${host}`;
-    
     const enrichedVideos = localVideos.map(video => ({
       ...video,
-      videoUrl: video.videoUrl && !video.videoUrl.startsWith('http')
-        ? `${baseUrl}${video.videoUrl}`
-        : video.videoUrl,
-      thumbnailUrl: video.thumbnailUrl && !video.thumbnailUrl.startsWith('http')
-        ? `${baseUrl}${video.thumbnailUrl}`
-        : video.thumbnailUrl
+      videoUrl: toPublicMediaUrl(req, video.videoUrl),
+      thumbnailUrl: toPublicMediaUrl(req, video.thumbnailUrl)
     }));
     
     res.json({
@@ -226,24 +190,12 @@ exports.getGomdezik = async (req, res) => {
     const total = await AudioTrack.countDocuments(query);
     
     // Ensure all URLs are absolute
-    const protocol = getRequestProtocol(req);
-    const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
-    const baseUrl = `${protocol}://${host}`;
-    
     // Transform AudioTracks to Video-like format for mobile compatibility
     const videos = recordings.map(recording => {
-      const videoUrl = recording.audioUrl 
-        ? (recording.audioUrl.startsWith('http') 
-            ? recording.audioUrl 
-            : `${baseUrl}${recording.audioUrl}`)
-        : '';
-      
-      // Use cover if available, otherwise use GOMDE logo as default
+      const videoUrl = toPublicMediaUrl(req, recording.audioUrl);
       const thumbnailUrl = recording.coverImageUrl
-        ? (recording.coverImageUrl.startsWith('http')
-            ? recording.coverImageUrl
-            : `${baseUrl}${recording.coverImageUrl}`)
-        : `${baseUrl}/public/assets/gomde-logo.png`;
+        ? toPublicMediaUrl(req, recording.coverImageUrl)
+        : toPublicMediaUrl(req, '/public/assets/gomde-logo.png');
       
       return {
         _id: recording._id,

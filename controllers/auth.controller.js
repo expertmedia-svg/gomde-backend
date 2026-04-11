@@ -17,6 +17,7 @@ const serializeUser = (user) => ({
   role: user.role,
   profile: user.profile,
   stats: user.stats,
+  wallet: user.wallet,
   verified: user.verified,
   primaryDiscipline: user.primaryDiscipline,
   disciplines: user.disciplines,

@@ -4,6 +4,7 @@ const User = require('../models/user');
 const Video = require('../models/video');
 const { buildDisciplinePayload } = require('../constants/disciplines');
 const { buildFileIntegrity } = require('../services/fileIntegrity.service');
+const { uploadLocalFile } = require('../services/mediaStorage.service');
 const { applyBattleOutcomeStats, awardBattleVote } = require('../services/score.service');
 const { markBattleLive, syncBattleLifecycle } = require('../services/battleLifecycle.service');
 const { updateScoresFromBattle, autoRegisterFromBattle } = require('./gomdeOr.controller');
@@ -380,8 +381,17 @@ exports.submitEntry = async (req, res) => {
       return res.status(400).json({ message: 'Vous avez déjà soumis votre vidéo' });
     }
 
-    const resolvedVideoUrl = req.file ? `/uploads/videos/${req.file.filename}` : videoUrl;
-    const resolvedVideoPublicId = req.file ? req.file.filename : videoPublicId;
+    const storedEntryVideo = req.file
+      ? await uploadLocalFile({
+          req,
+          localPath: req.file.path,
+          subdirectory: 'videos',
+          fileName: req.file.filename,
+          contentType: req.file.mimetype,
+        })
+      : null;
+    const resolvedVideoUrl = storedEntryVideo?.publicUrl || videoUrl;
+    const resolvedVideoPublicId = storedEntryVideo?.objectKey || (req.file ? req.file.filename : videoPublicId);
     const resolvedThumbnailUrl = thumbnailUrl || '';
 
     if (!resolvedVideoUrl) {

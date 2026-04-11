@@ -18,11 +18,25 @@ const clamp = (value, minimum, maximum) => {
 };
 
 const resolveUploadedAudioPath = (audioUrl) => {
-  if (!audioUrl || typeof audioUrl !== 'string' || !audioUrl.startsWith(UPLOADS_PREFIX)) {
+  if (!audioUrl || typeof audioUrl !== 'string') {
     return null;
   }
 
-  const relativePath = decodeURIComponent(audioUrl.slice(UPLOADS_PREFIX.length));
+  let candidate = audioUrl;
+  if (/^https?:\/\//i.test(candidate)) {
+    try {
+      candidate = new URL(candidate).pathname;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  const uploadsIndex = candidate.indexOf(UPLOADS_PREFIX);
+  if (uploadsIndex === -1) {
+    return null;
+  }
+
+  const relativePath = decodeURIComponent(candidate.slice(uploadsIndex + UPLOADS_PREFIX.length));
   return path.join(__dirname, '..', 'uploads', relativePath);
 };
 

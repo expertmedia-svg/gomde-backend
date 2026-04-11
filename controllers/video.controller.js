@@ -3,8 +3,16 @@ const User = require('../models/user');
 const path = require('path');
 const { buildDisciplinePayload } = require('../constants/disciplines');
 const { buildFileIntegrity } = require('../services/fileIntegrity.service');
+const { grantGocoReward } = require('../services/goco.service');
+const {
+  deleteStoredFile,
+  resolveLocalUploadPath,
+  toPublicMediaUrl,
+  uploadLocalFile,
+} = require('../services/mediaStorage.service');
 const { createVideoThumbnail, transcodeFeedVideo, safeUnlink } = require('../services/videoTranscode.service');
 const { recomputeUserScoreById } = require('../services/score.service');
+const { createSharePost, syncPublicationPost } = require('../services/social.service');
 
 const resolveUploadFilePath = (value, subdirectory, fallbackName) => {
   const candidate = typeof value === 'string' && value.trim().length > 0
@@ -31,37 +39,15 @@ const resolveUploadFilePath = (value, subdirectory, fallbackName) => {
     return null;
   }
 
-  return path.join(__dirname, '..', 'uploads', subdirectory, fileName);
+  return resolveLocalUploadPath(subdirectory, fileName);
 };
 
-// Helper to get correct protocol (handles nginx reverse proxy)
-const getRequestProtocol = (req) => {
-  // Use x-forwarded-proto header from reverse proxy (nginx/nginx set this)
-  const forwardedProto = req.get('x-forwarded-proto');
-  if (forwardedProto) return forwardedProto;
-  
-  // Fallback: force https in production, req.protocol for local dev
-  if (process.env.NODE_ENV === 'production') {
-    return 'https';
-  }
-  return req.protocol || 'https';
-};
-
-// Helper to ensure all URLs are absolute
 const ensureAbsoluteUrls = (video, req) => {
   if (!video) return video;
-  
-  const protocol = getRequestProtocol(req);
-  const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
-  const baseUrl = `${protocol}://${host}`;
-  
+
   const enriched = { ...video };
-  if (enriched.videoUrl && !enriched.videoUrl.startsWith('http')) {
-    enriched.videoUrl = `${baseUrl}${enriched.videoUrl}`;
-  }
-  if (enriched.thumbnailUrl && !enriched.thumbnailUrl.startsWith('http')) {
-    enriched.thumbnailUrl = `${baseUrl}${enriched.thumbnailUrl}`;
-  }
+  enriched.videoUrl = toPublicMediaUrl(req, enriched.videoUrl);
+  enriched.thumbnailUrl = toPublicMediaUrl(req, enriched.thumbnailUrl);
   return enriched;
 };
 
@@ -81,6 +67,7 @@ exports.uploadVideo = async (req, res) => {
     const sourcePath = req.file.path;
     const sourceFilename = path.basename(sourcePath);
     const sourceExtension = path.extname(sourceFilename).toLowerCase();
+    const integrity = await buildFileIntegrity(req.file);
     let asset = null;
     let usedTranscodeFallback = false;
 
@@ -131,11 +118,22 @@ exports.uploadVideo = async (req, res) => {
       };
     }
     
-    // Construct absolute URLs for files
-    const protocol = getRequestProtocol(req);
-    const host = req.get('host') || process.env.PUBLIC_HOST || 'localhost:5000';
-    const baseUrl = `${protocol}://${host}`;
-    const integrity = await buildFileIntegrity(req.file);
+    const storedVideo = await uploadLocalFile({
+      req,
+      localPath: resolveLocalUploadPath('videos', asset.videoFilename),
+      subdirectory: 'videos',
+      fileName: asset.videoFilename,
+      contentType: sourceExtension === '.webm' ? 'video/webm' : 'video/mp4',
+    });
+    const storedThumbnail = asset.thumbnailFilename
+      ? await uploadLocalFile({
+          req,
+          localPath: resolveLocalUploadPath('thumbnails', asset.thumbnailFilename),
+          subdirectory: 'thumbnails',
+          fileName: asset.thumbnailFilename,
+          contentType: 'image/jpeg',
+        })
+      : null;
     
     const video = await Video.create({
       title: normalizedTitle,
@@ -144,12 +142,12 @@ exports.uploadVideo = async (req, res) => {
       categories: normalizedCategories.categories,
       description,
       user: req.user._id,
-      videoUrl: `${baseUrl}/uploads/videos/${asset.videoFilename}`,
-      videoPublicId: asset.videoFilename,
+      videoUrl: storedVideo.publicUrl,
+      videoPublicId: storedVideo.objectKey || asset.videoFilename,
       uploadChecksum: integrity?.checksum || '',
       uploadSizeBytes: integrity?.sizeBytes || 0,
       uploadMimeType: integrity?.mimeType || '',
-      thumbnailUrl: asset.thumbnailFilename ? `${baseUrl}/uploads/thumbnails/${asset.thumbnailFilename}` : '',
+      thumbnailUrl: storedThumbnail?.publicUrl || '',
       tags: tags ? tags.split(',') : []
     });
 
@@ -172,6 +170,13 @@ exports.uploadVideo = async (req, res) => {
         })
       );
     }
+
+    await syncPublicationPost({
+      authorId: req.user._id,
+      targetType: 'video',
+      targetId: video._id,
+      text: description || normalizedTitle,
+    });
     
     res.status(201).json({
       ...video.toObject(),
@@ -259,6 +264,15 @@ exports.incrementVideoView = async (req, res) => {
     });
 
     await recomputeUserScoreById(video.user);
+    await grantGocoReward({
+      userId: video.user,
+      actorId: req.user?._id || null,
+      actionType: 'video_view',
+      targetType: 'video',
+      targetId: video._id,
+      metadata: { title: video.title },
+      eventKey: `video_view:${video._id}:${req.user?._id || req.ip}:${new Date().toISOString().slice(0, 10)}`,
+    });
 
     res.json({ views: video.views });
   } catch (error) {
@@ -332,6 +346,20 @@ exports.shareVideo = async (req, res) => {
       $inc: { 'stats.totalShares': 1 }
     });
     await recomputeUserScoreById(video.user);
+    await grantGocoReward({
+      userId: video.user,
+      actorId: req.user._id,
+      actionType: 'content_share',
+      targetType: 'video',
+      targetId: video._id,
+      metadata: { title: video.title },
+      eventKey: `video_share:${video._id}:${req.user._id}:${new Date().toISOString().slice(0, 10)}`,
+    });
+    await createSharePost({
+      authorId: req.user._id,
+      targetType: 'video',
+      targetId: video._id,
+    });
     
     res.json({ shares: video.shares });
   } catch (error) {
@@ -370,6 +398,17 @@ exports.deleteVideo = async (req, res) => {
 
       try {
         await safeUnlink(filePath);
+      } catch (cleanupError) {
+        console.error(cleanupError);
+      }
+    }
+
+    for (const remoteTarget of [
+      { value: video.videoUrl, fileName: video.videoPublicId, subdirectory: 'videos' },
+      { value: video.thumbnailUrl, subdirectory: 'thumbnails' },
+    ]) {
+      try {
+        await deleteStoredFile(remoteTarget);
       } catch (cleanupError) {
         console.error(cleanupError);
       }

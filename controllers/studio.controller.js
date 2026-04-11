@@ -4,7 +4,10 @@ const fs = require('fs');
 const { buildDisciplinePayload } = require('../constants/disciplines');
 const { buildFileIntegrity } = require('../services/fileIntegrity.service');
 const { renderStudioMix } = require('../services/audioMix.service');
+const { grantGocoReward } = require('../services/goco.service');
+const { deleteStoredFile, uploadLocalFile } = require('../services/mediaStorage.service');
 const { recomputeUserScoreById } = require('../services/score.service');
+const { createSharePost, syncPublicationPost } = require('../services/social.service');
 
 const safeRemoveStudioFile = async (filePath) => {
   if (!filePath) {
@@ -247,6 +250,7 @@ exports.saveAudioRecording = async (req, res) => {
     const uploadIntegrity = await buildFileIntegrity(finalIntegritySource);
 
     let finalAudioUrl = mixFile ? `/uploads/audio/${mixFile.filename}` : null;
+    let finalAudioFileName = mixFile?.filename || null;
 
     if (shouldRenderMix && rawVoiceFile) {
       const renderedMix = await renderStudioMix({
@@ -259,20 +263,34 @@ exports.saveAudioRecording = async (req, res) => {
       });
 
       finalAudioUrl = renderedMix.audioUrl;
+      finalAudioFileName = renderedMix.fileName;
     }
 
     if (!finalAudioUrl && rawVoiceFile) {
       finalAudioUrl = `/uploads/audio/${rawVoiceFile.filename}`;
+      finalAudioFileName = rawVoiceFile.filename;
     }
 
     if (!finalAudioUrl) {
       return res.status(400).json({ message: 'Unable to render or resolve the final mix' });
     }
 
+    const storedFinalAudio = finalAudioFileName
+      ? await uploadLocalFile({
+          req,
+          localPath: path.join(__dirname, '..', 'uploads', 'audio', finalAudioFileName),
+          subdirectory: 'audio',
+          fileName: finalAudioFileName,
+          contentType: mixFile?.mimetype || rawVoiceFile?.mimetype || 'audio/mp4',
+        })
+      : null;
+
+    const persistedAudioUrl = storedFinalAudio?.publicUrl || finalAudioUrl;
+
     if (isPreviewMix) {
       return res.json({
         preview: true,
-        audioUrl: finalAudioUrl,
+        audioUrl: persistedAudioUrl,
         title: title || 'Préécoute studio',
         metadata: {
           effects: parsedEffects,
@@ -295,7 +313,7 @@ exports.saveAudioRecording = async (req, res) => {
       categories: normalizedCategories.categories,
       bpm: selectedInstrumental?.bpm,
       user: req.user._id,
-      audioUrl: finalAudioUrl,
+      audioUrl: persistedAudioUrl,
       uploadChecksum: uploadIntegrity?.checksum || '',
       uploadSizeBytes: uploadIntegrity?.sizeBytes || 0,
       uploadMimeType: uploadIntegrity?.mimeType || '',
@@ -357,7 +375,15 @@ exports.uploadInstrumental = async (req, res) => {
       artist: 'Catalogue GOMDE',
       genre: genre || 'Various',
       bpm: bpm ? Number(bpm) : undefined,
-      audioUrl: `/uploads/audio/${req.file.filename}`,
+      audioUrl: (
+        await uploadLocalFile({
+          req,
+          localPath: req.file.path,
+          subdirectory: 'audio',
+          fileName: req.file.filename,
+          contentType: req.file.mimetype,
+        })
+      ).publicUrl,
       instrumental: true,
       user: req.user._id,
       isPublic: true
@@ -418,12 +444,27 @@ exports.publishRecording = async (req, res) => {
 
     // Save cover image if provided
     if (req.file) {
-      recording.coverImageUrl = `/uploads/covers/${req.file.filename}`;
+      recording.coverImageUrl = (
+        await uploadLocalFile({
+          req,
+          localPath: req.file.path,
+          subdirectory: 'covers',
+          fileName: req.file.filename,
+          contentType: req.file.mimetype,
+        })
+      ).publicUrl;
     }
 
     recording.shareToCommunity = true;
     recording.isPublic = true;
     await recording.save();
+
+    await syncPublicationPost({
+      authorId: req.user._id,
+      targetType: 'audio',
+      targetId: recording._id,
+      text: recording.description || recording.title,
+    });
 
     res.json(recording);
   } catch (error) {
@@ -448,6 +489,15 @@ exports.incrementRecordingPlay = async (req, res) => {
         $inc: { 'stats.totalViews': 1 }
       });
       await recomputeUserScoreById(recording.user._id);
+      await grantGocoReward({
+        userId: recording.user._id,
+        actorId: req.user?._id || null,
+        actionType: 'audio_play',
+        targetType: 'audio',
+        targetId: recording._id,
+        metadata: { title: recording.title },
+        eventKey: `audio_play:${recording._id}:${req.user?._id || req.ip}:${new Date().toISOString().slice(0, 10)}`,
+      });
     }
 
     res.json({ plays: recording.plays });
@@ -537,7 +587,22 @@ exports.shareRecording = async (req, res) => {
         $inc: { 'stats.totalShares': 1 }
       });
       await recomputeUserScoreById(recording.user._id);
+      await grantGocoReward({
+        userId: recording.user._id,
+        actorId: req.user._id,
+        actionType: 'content_share',
+        targetType: 'audio',
+        targetId: recording._id,
+        metadata: { title: recording.title },
+        eventKey: `audio_share:${recording._id}:${req.user._id}:${new Date().toISOString().slice(0, 10)}`,
+      });
     }
+
+    await createSharePost({
+      authorId: req.user._id,
+      targetType: 'audio',
+      targetId: recording._id,
+    });
 
     res.json({ shares: recording.shares });
   } catch (error) {
@@ -574,6 +639,18 @@ exports.deleteRecording = async (req, res) => {
 
       try {
         await safeRemoveStudioFile(filePath);
+      } catch (cleanupError) {
+        console.error(cleanupError);
+      }
+    }
+
+    for (const remoteTarget of [
+      { value: recording.audioUrl, subdirectory: 'audio' },
+      { value: recording.metadata?.rawVoiceUrl, subdirectory: 'audio' },
+      { value: recording.coverImageUrl, subdirectory: 'covers' },
+    ]) {
+      try {
+        await deleteStoredFile(remoteTarget);
       } catch (cleanupError) {
         console.error(cleanupError);
       }

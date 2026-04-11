@@ -1,6 +1,8 @@
 const express = require('express');
 const router = express.Router();
 const { protect } = require('../middleware/auth');
+const { buildRouteCache } = require('../middleware/cache');
+const { buildActionLimiter } = require('../middleware/traffic');
 const User = require('../models/user');
 const {
   normalizeLocationKey,
@@ -44,7 +46,14 @@ const buildLeaderboardRow = (user, rank) => {
   };
 };
 
-router.get('/', protect, async (req, res) => {
+const followLimiter = buildActionLimiter({
+  windowMs: 10 * 60 * 1000,
+  max: 50,
+  prefix: 'user-follow',
+  paramName: 'id',
+});
+
+router.get('/', protect, buildRouteCache({ ttlMs: 10000 }), async (req, res) => {
   try {
     const { page = 1, limit = 20, role, city, search } = req.query;
     const query = { isActive: true };
@@ -80,7 +89,7 @@ router.get('/', protect, async (req, res) => {
   }
 });
 
-router.get('/leaderboard', protect, async (req, res) => {
+router.get('/leaderboard', protect, buildRouteCache({ ttlMs: 15000 }), async (req, res) => {
   try {
     const {
       scope = 'national',
@@ -190,7 +199,7 @@ router.get('/leaderboard', protect, async (req, res) => {
   }
 });
 
-router.get('/:id', protect, async (req, res) => {
+router.get('/:id', protect, buildRouteCache({ ttlMs: 10000 }), async (req, res) => {
   try {
     const user = await User.findById(req.params.id)
       .select('-password')
@@ -208,7 +217,7 @@ router.get('/:id', protect, async (req, res) => {
   }
 });
 
-router.post('/:id/follow', protect, async (req, res) => {
+router.post('/:id/follow', protect, followLimiter, async (req, res) => {
   try {
     const userToFollow = await User.findById(req.params.id);
     const currentUser = await User.findById(req.user._id);
