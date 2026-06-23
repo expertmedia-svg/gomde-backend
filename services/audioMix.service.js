@@ -95,7 +95,7 @@ exports.renderStudioMix = async ({
   const highEq = clamp(effects.highEq ?? 0, -1, 1) * 10;
   const vocalPan = clamp(channelPan.leadVox ?? 0, -100, 100) / 100;
   const beatPan = clamp(channelPan.beat ?? 0, -100, 100) / 100;
-  const voiceOffsetMs = Math.round(clamp(timeline.voiceOffset ?? 0, 0, 12000));
+  const voiceOffsetMs = Math.round(clamp(timeline.voiceOffset ?? 0, -12000, 12000));
   const trimStartSeconds = clamp(timeline.trimStart ?? 0, 0, 30000) / 1000;
   const trimEndSeconds = clamp(timeline.trimEnd ?? 0, 0, 30000) / 1000;
 
@@ -161,6 +161,9 @@ exports.renderStudioMix = async ({
     ];
     if (Math.abs(beatPan) > 0.01) {
       beatFilters.push(`stereotools=balance_in=${beatPan.toFixed(2)}`);
+    }
+    if (voiceOffsetMs < 0) {
+      beatFilters.push(`adelay=${Math.abs(voiceOffsetMs)}:all=1`);
     }
     filterComplex = `${filterComplex};[1:a]${beatFilters.join(',')}[beat];[beat][vox]amix=inputs=2:normalize=0:dropout_transition=0,alimiter=limit=0.95[out]`;
   } else {
