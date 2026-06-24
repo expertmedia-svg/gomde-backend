@@ -131,6 +131,15 @@ exports.renderStudioMix = async ({
   effects = {},
   timeline = {}
 }) => {
+  console.log('[AUDIO-MIX] renderStudioMix start', {
+    rawVoicePath,
+    instrumentalUrl,
+    channelLevels,
+    channelPan,
+    effects,
+    timeline,
+  });
+
   if (!rawVoicePath || !fs.existsSync(rawVoicePath)) {
     throw new Error('Raw voice file is missing');
   }
@@ -234,24 +243,21 @@ exports.renderStudioMix = async ({
     if (voiceOffsetMs < 0) {
       beatFilters.push(`adelay=${Math.abs(voiceOffsetMs)}:all=1`);
     }
-    filterComplex = `${filterComplex};[1:a]${beatFilters.join(',')}[beat];[beat][vox]amix=inputs=2:normalize=0:dropout_transition=0,alimiter=limit=0.95[out]`;
-  } else {
-    filterComplex = `${filterComplex};[vox]alimiter=limit=0.95[out]`;
-  }
-
-  ffmpegArguments.push(
-    '-filter_complex',
-    filterComplex,
-    '-map',
-    '[out]',
-    '-c:a',
-    'aac',
-    '-b:a',
-    '192k',
+    filterComplex = `${filterComplex};[1:a]${beatFilters.join(',')}[beat];[beat][vox]amix=inputs=2:normalize=0:dropout_transition=0:duration=longest,alimiter=limit=0.95[out]`;
     outputPath
   );
 
   await runFfmpeg(ffmpegArguments);
+
+  console.log('[AUDIO-MIX] ffmpeg mix completed', {
+    outputPath,
+    vocalLevel,
+    beatLevel,
+    voiceOffsetMs,
+    trimStartSeconds,
+    trimEndSeconds,
+    instrumentalPath: instrumentalPath || null,
+  });
 
   // Apply autotune with librosa if enabled
   if (autotuneAmount > 0.05) {
@@ -312,6 +318,12 @@ exports.renderStudioMix = async ({
       console.warn(`[AUDIO-MIX] Failed to clean up temp file: ${cleanupErr.message}`);
     }
   }
+
+  console.log('[AUDIO-MIX] renderStudioMix complete', {
+    outputFileName,
+    outputPath,
+    audioUrl: `/uploads/audio/${outputFileName}`,
+  });
 
   return {
     fileName: outputFileName,
