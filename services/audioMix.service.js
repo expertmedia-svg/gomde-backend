@@ -249,6 +249,8 @@ exports.renderStudioMix = async ({
       '-map', '[out]',
       '-c:a', 'aac',
       '-b:a', '192k',
+      '-movflags', '+faststart',
+      '-f', 'mp4',
       outputPath
     );
   } else {
@@ -257,11 +259,20 @@ exports.renderStudioMix = async ({
       '-map', '[vox]',
       '-c:a', 'aac',
       '-b:a', '192k',
+      '-movflags', '+faststart',
+      '-f', 'mp4',
       outputPath
     );
   }
 
+  console.log('[AUDIO-MIX] ffmpeg args', ffmpegArguments);
+
   await runFfmpeg(ffmpegArguments);
+
+  const outputStats = fs.existsSync(outputPath) ? fs.statSync(outputPath) : null;
+  if (!outputStats || outputStats.size === 0) {
+    throw new Error(`FFmpeg produced invalid mix file: ${outputPath}`);
+  }
 
   console.log('[AUDIO-MIX] ffmpeg mix completed', {
     outputPath,
