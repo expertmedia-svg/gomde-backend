@@ -1,10 +1,13 @@
 const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
+const https = require('https');
+const http = require('http');
 const ffmpegPath = require('ffmpeg-static');
 const { applyAutotune, isAutotuneAvailable } = require('./autotune');
 
 const AUDIO_DIRECTORY = path.join(__dirname, '..', 'uploads', 'audio');
+const TEMP_DIRECTORY = path.join(__dirname, '..', 'uploads', 'temp');
 const UPLOADS_PREFIX = '/uploads/';
 
 const clamp = (value, minimum, maximum) => {
@@ -39,6 +42,64 @@ const resolveUploadedAudioPath = (audioUrl) => {
   const relativePath = decodeURIComponent(candidate.slice(uploadsIndex + UPLOADS_PREFIX.length));
   return path.join(__dirname, '..', 'uploads', relativePath);
 };
+
+/**
+ * Downloads a remote audio file to a temporary local path for ffmpeg processing.
+ * Returns the local temp path, or null on failure.
+ */
+const downloadRemoteAudio = (remoteUrl) => new Promise((resolve) => {
+  if (!remoteUrl || !/^https?:\/\//i.test(remoteUrl)) {
+    return resolve(null);
+  }
+
+  fs.mkdirSync(TEMP_DIRECTORY, { recursive: true });
+
+  const ext = path.extname(new URL(remoteUrl).pathname) || '.m4a';
+  const tempFileName = `dl-${Date.now()}-${Math.round(Math.random() * 1e9)}${ext}`;
+  const tempPath = path.join(TEMP_DIRECTORY, tempFileName);
+  const protocol = remoteUrl.startsWith('https') ? https : http;
+
+  const file = fs.createWriteStream(tempPath);
+
+  const request = protocol.get(remoteUrl, (response) => {
+    // Follow redirects (301, 302)
+    if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+      file.close();
+      try { fs.unlinkSync(tempPath); } catch (_) {}
+      return downloadRemoteAudio(response.headers.location).then(resolve);
+    }
+
+    if (response.statusCode !== 200) {
+      file.close();
+      try { fs.unlinkSync(tempPath); } catch (_) {}
+      console.warn(`[AUDIO-MIX] Download failed: HTTP ${response.statusCode} for ${remoteUrl}`);
+      return resolve(null);
+    }
+
+    response.pipe(file);
+    file.on('finish', () => {
+      file.close();
+      console.log(`[AUDIO-MIX] Downloaded instrumental to ${tempPath}`);
+      resolve(tempPath);
+    });
+  });
+
+  request.on('error', (err) => {
+    file.close();
+    try { fs.unlinkSync(tempPath); } catch (_) {}
+    console.warn(`[AUDIO-MIX] Download error: ${err.message}`);
+    resolve(null);
+  });
+
+  // Timeout after 30 seconds
+  request.setTimeout(30000, () => {
+    request.destroy();
+    file.close();
+    try { fs.unlinkSync(tempPath); } catch (_) {}
+    console.warn(`[AUDIO-MIX] Download timeout for ${remoteUrl}`);
+    resolve(null);
+  });
+});
 
 const runFfmpeg = (argumentsList) => new Promise((resolve, reject) => {
   const process = spawn(ffmpegPath, argumentsList, {
@@ -82,7 +143,15 @@ exports.renderStudioMix = async ({
 
   const outputFileName = `mix-${Date.now()}-${Math.round(Math.random() * 1e9)}.m4a`;
   const outputPath = path.join(AUDIO_DIRECTORY, outputFileName);
-  const instrumentalPath = resolveUploadedAudioPath(instrumentalUrl);
+
+  // Try local resolution first, then download remote instrumental as fallback
+  let instrumentalPath = resolveUploadedAudioPath(instrumentalUrl);
+  let tempInstrumentalPath = null;
+  if ((!instrumentalPath || !fs.existsSync(instrumentalPath)) && instrumentalUrl) {
+    console.log(`[AUDIO-MIX] Instrumental not found locally, attempting remote download: ${instrumentalUrl}`);
+    tempInstrumentalPath = await downloadRemoteAudio(instrumentalUrl);
+    instrumentalPath = tempInstrumentalPath;
+  }
 
   const vocalLevel = clamp(channelLevels.leadVox ?? 82, 0, 200) / 100;
   const beatLevel = clamp(channelLevels.beat ?? 76, 0, 200) / 100;
@@ -230,6 +299,17 @@ exports.renderStudioMix = async ({
     } catch (error) {
       console.error('[AUTOTUNE] Error:', error.message);
       console.warn('[AUTOTUNE] Continuing with mix without autotune');
+    }
+  }
+  // Clean up temporary downloaded instrumental file
+  if (tempInstrumentalPath) {
+    try {
+      if (fs.existsSync(tempInstrumentalPath)) {
+        fs.unlinkSync(tempInstrumentalPath);
+        console.log(`[AUDIO-MIX] Cleaned up temp instrumental: ${tempInstrumentalPath}`);
+      }
+    } catch (cleanupErr) {
+      console.warn(`[AUDIO-MIX] Failed to clean up temp file: ${cleanupErr.message}`);
     }
   }
 

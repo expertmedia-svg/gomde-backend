@@ -350,7 +350,10 @@ exports.saveAudioRecording = async (req, res) => {
     res.status(201).json(populatedTrack);
   } catch (error) {
     console.error(error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ 
+      message: 'Erreur lors de la sauvegarde ou du mixage', 
+      error: error.message || error.toString() 
+    });
   }
 };
 
