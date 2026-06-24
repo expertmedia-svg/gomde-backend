@@ -244,8 +244,22 @@ exports.renderStudioMix = async ({
       beatFilters.push(`adelay=${Math.abs(voiceOffsetMs)}:all=1`);
     }
     filterComplex = `${filterComplex};[1:a]${beatFilters.join(',')}[beat];[beat][vox]amix=inputs=2:normalize=0:dropout_transition=0:duration=longest,alimiter=limit=0.95[out]`;
-    outputPath
-  );
+    ffmpegArguments.push(
+      '-filter_complex', filterComplex,
+      '-map', '[out]',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      outputPath
+    );
+  } else {
+    ffmpegArguments.push(
+      '-filter_complex', filterComplex,
+      '-map', '[vox]',
+      '-c:a', 'aac',
+      '-b:a', '192k',
+      outputPath
+    );
+  }
 
   await runFfmpeg(ffmpegArguments);
 
