@@ -47,18 +47,25 @@ const grantGocoReward = async ({
     }
   }
 
-  const user = await User.findById(userId).select('wallet');
+  // Atomic $inc instead of read-modify-write: concurrent rewards (e.g.
+  // simultaneous views on popular content) must never clobber each other,
+  // since this balance is withdrawable as real money.
+  const user = await User.findByIdAndUpdate(
+    userId,
+    {
+      $inc: {
+        'wallet.balance': amount,
+        'wallet.lifetimeEarned': amount,
+      },
+      $set: { 'wallet.lastRewardAt': new Date() },
+    },
+    { new: true, select: 'wallet' }
+  );
   if (!user) {
     return { awarded: false, reason: 'user-not-found' };
   }
 
-  user.wallet = {
-    balance: roundAmount((user.wallet?.balance || 0) + amount),
-    lifetimeEarned: roundAmount((user.wallet?.lifetimeEarned || 0) + amount),
-    pendingBalance: roundAmount(user.wallet?.pendingBalance || 0),
-    lastRewardAt: new Date(),
-  };
-  await user.save();
+  const balance = roundAmount(user.wallet.balance);
 
   const transaction = await GocoTransaction.create({
     user: userId,
@@ -68,14 +75,14 @@ const grantGocoReward = async ({
     targetType,
     targetId: String(targetId),
     eventKey,
-    balanceAfter: user.wallet.balance,
+    balanceAfter: balance,
     metadata,
   });
 
   return {
     awarded: true,
     amount,
-    balance: user.wallet.balance,
+    balance,
     transaction,
   };
 };
@@ -107,19 +114,25 @@ const requestWithdrawal = async ({ userId, amount, payoutMethod, payoutLabel }) 
     throw new Error('Unsupported payout method');
   }
 
-  const user = await User.findById(userId).select('wallet');
+  // Atomic conditional update: the balance check and the deduction happen as
+  // one operation, so two concurrent withdrawal requests can't both pass the
+  // check and then both deduct (which would let a user withdraw more than
+  // their real balance).
+  const user = await User.findOneAndUpdate(
+    { _id: userId, 'wallet.balance': { $gte: normalizedAmount } },
+    {
+      $inc: {
+        'wallet.balance': -normalizedAmount,
+        'wallet.pendingBalance': normalizedAmount,
+      },
+    },
+    { new: true, select: 'wallet' }
+  );
+
   if (!user) {
-    throw new Error('User not found');
+    const exists = await User.exists({ _id: userId });
+    throw new Error(exists ? 'Insufficient balance' : 'User not found');
   }
-
-  const currentBalance = roundAmount(user.wallet?.balance || 0);
-  if (currentBalance < normalizedAmount) {
-    throw new Error('Insufficient balance');
-  }
-
-  user.wallet.balance = roundAmount(currentBalance - normalizedAmount);
-  user.wallet.pendingBalance = roundAmount((user.wallet?.pendingBalance || 0) + normalizedAmount);
-  await user.save();
 
   const withdrawal = await GocoWithdrawal.create({
     user: userId,
@@ -135,7 +148,7 @@ const requestWithdrawal = async ({ userId, amount, payoutMethod, payoutLabel }) 
     targetType: 'wallet',
     targetId: String(withdrawal._id),
     eventKey: `withdrawal_request:${withdrawal._id}`,
-    balanceAfter: user.wallet.balance,
+    balanceAfter: roundAmount(user.wallet.balance),
     metadata: { payoutMethod, payoutLabel },
   });
 
@@ -156,15 +169,21 @@ const reviewWithdrawal = async ({ withdrawalId, adminId, status, adminNote = '' 
     throw new Error('Invalid review status');
   }
 
-  const user = await User.findById(withdrawal.user).select('wallet');
+  const inc = { 'wallet.pendingBalance': -withdrawal.amount };
+  if (status === 'rejected') {
+    inc['wallet.balance'] = withdrawal.amount;
+  }
+
+  const user = await User.findByIdAndUpdate(
+    withdrawal.user,
+    { $inc: inc },
+    { new: true, select: 'wallet' }
+  );
   if (!user) {
     throw new Error('User not found');
   }
 
-  user.wallet.pendingBalance = roundAmount((user.wallet?.pendingBalance || 0) - withdrawal.amount);
-
   if (status === 'rejected') {
-    user.wallet.balance = roundAmount((user.wallet?.balance || 0) + withdrawal.amount);
     await GocoTransaction.create({
       user: withdrawal.user,
       actor: adminId,
@@ -173,12 +192,10 @@ const reviewWithdrawal = async ({ withdrawalId, adminId, status, adminNote = '' 
       targetType: 'wallet',
       targetId: String(withdrawal._id),
       eventKey: `withdrawal_rejected:${withdrawal._id}`,
-      balanceAfter: user.wallet.balance,
+      balanceAfter: roundAmount(user.wallet.balance),
       metadata: { adminNote },
     });
   }
-
-  await user.save();
 
   withdrawal.status = status;
   withdrawal.reviewedBy = adminId;

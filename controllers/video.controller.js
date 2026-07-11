@@ -171,13 +171,20 @@ exports.uploadVideo = async (req, res) => {
       );
     }
 
-    await syncPublicationPost({
-      authorId: req.user._id,
-      targetType: 'video',
-      targetId: video._id,
-      text: description || normalizedTitle,
-    });
-    
+    try {
+      await syncPublicationPost({
+        authorId: req.user._id,
+        targetType: 'video',
+        targetId: video._id,
+        text: description || normalizedTitle,
+      });
+    } catch (syncError) {
+      // The video itself is already saved and publicly queryable at this point.
+      // A failure to sync the social-feed post must not turn into a 500 that
+      // makes the client believe the whole upload failed (and possibly retry it).
+      console.error('[feed-video] syncPublicationPost failed', syncError);
+    }
+
     res.status(201).json({
       ...video.toObject(),
       processingFallback: usedTranscodeFallback,

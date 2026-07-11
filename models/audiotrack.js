@@ -132,6 +132,13 @@ const audioTrackSchema = new mongoose.Schema({
   }
 });
 
+// Every feed/studio listing filters on some combination of these fields and
+// sorts by createdAt or plays; with no indexes at all each query was a full
+// collection scan repeated every 10-15s (the route cache TTL).
+audioTrackSchema.index({ instrumental: 1, shareToCommunity: 1, isPublic: 1, createdAt: -1 });
+audioTrackSchema.index({ user: 1, instrumental: 1, createdAt: -1 });
+audioTrackSchema.index({ instrumental: 1, isPublic: 1, genre: 1, plays: -1 });
+
 audioTrackSchema.pre('validate', function normalizeAudioTrackCategories(next) {
   const payload = buildDisciplinePayload(
     this.categories?.length ? this.categories : this.primaryCategory || this.genre || this.category,

@@ -1,6 +1,8 @@
 /**
- * Script de nettoyage - Supprime toutes les vidéos et enregistrements de test
- * Usage: node cleanup-videos.js
+ * Script de nettoyage - Supprime TOUTES les vidéos et TOUS les enregistrements
+ * audio de type "recording" (ainsi que leurs fichiers sur disque). Destructeur
+ * et irréversible : jamais de dry-run, jamais de filtre par utilisateur/date.
+ * Usage: node cleanup-videos.js --yes
  */
 require('dotenv').config();
 const mongoose = require('mongoose');
@@ -10,7 +12,26 @@ const path = require('path');
 const Video = require('./models/video');
 const AudioTrack = require('./models/audiotrack');
 
+const confirmed = process.argv.slice(2).includes('--yes');
+
 async function cleanup() {
+  if (process.env.NODE_ENV === 'production') {
+    console.error(
+      'Refusé : NODE_ENV=production. Ce script supprime tout le contenu ' +
+      'utilisateur de façon irréversible et ne doit jamais tourner contre une base de production.'
+    );
+    process.exit(1);
+  }
+
+  if (!confirmed) {
+    console.error(
+      'Ce script va supprimer TOUTES les vidéos et TOUS les enregistrements ' +
+      'audio de type "recording", plus leurs fichiers sur disque. Action irréversible.\n' +
+      'Relance avec la confirmation explicite : node cleanup-videos.js --yes'
+    );
+    process.exit(1);
+  }
+
   try {
     console.log('Connexion à MongoDB...');
     await mongoose.connect(process.env.MONGODB_URI, {

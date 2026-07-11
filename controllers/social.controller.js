@@ -10,12 +10,14 @@ const {
 exports.getWall = async (req, res) => {
   try {
     const limit = Math.min(30, Math.max(1, Number(req.query.limit) || 18));
+    const page = Math.max(1, Number(req.query.page) || 1);
     const posts = await fetchWallPosts({
       userId: req.params.userId,
       viewerId: req.user?._id,
       limit,
+      skip: (page - 1) * limit,
     });
-    res.json({ posts });
+    res.json({ posts, currentPage: page, hasMore: posts.length === limit });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
@@ -25,8 +27,9 @@ exports.getWall = async (req, res) => {
 exports.getFollowingFeed = async (req, res) => {
   try {
     const limit = Math.min(40, Math.max(1, Number(req.query.limit) || 24));
-    const posts = await fetchFollowingFeed({ viewer: req.user, limit });
-    res.json({ posts });
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const posts = await fetchFollowingFeed({ viewer: req.user, limit, skip: (page - 1) * limit });
+    res.json({ posts, currentPage: page, hasMore: posts.length === limit });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

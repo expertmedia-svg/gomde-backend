@@ -417,14 +417,21 @@ exports.getUserRecordings = async (req, res) => {
 
 exports.getCommunityRecordings = async (req, res) => {
   try {
+    const { userId, limit = 24 } = req.query;
+    const safeLimit = Math.min(50, Math.max(1, Number(limit) || 24));
+
     const recordings = await AudioTrack.find({
       instrumental: false,
       shareToCommunity: true,
-      isPublic: true
+      isPublic: true,
+      // Filtering by user here (server-side) instead of downloading every
+      // community recording and filtering client-side — a profile page view
+      // used to pay the cost of the entire community collection.
+      ...(userId ? { user: userId } : {}),
     })
       .populate('user', 'username profile.city profile.neighborhood')
       .sort({ createdAt: -1 })
-      .limit(24);
+      .limit(safeLimit);
 
     res.json(recordings);
   } catch (error) {
@@ -462,12 +469,19 @@ exports.publishRecording = async (req, res) => {
     recording.isPublic = true;
     await recording.save();
 
-    await syncPublicationPost({
-      authorId: req.user._id,
-      targetType: 'audio',
-      targetId: recording._id,
-      text: recording.description || recording.title,
-    });
+    try {
+      await syncPublicationPost({
+        authorId: req.user._id,
+        targetType: 'audio',
+        targetId: recording._id,
+        text: recording.description || recording.title,
+      });
+    } catch (syncError) {
+      // The recording is already saved and public at this point. A failure to
+      // sync the social-feed post must not turn into a 500 that makes the
+      // client believe publishing failed when it actually succeeded.
+      console.error('[studio] syncPublicationPost failed', syncError);
+    }
 
     res.json(recording);
   } catch (error) {

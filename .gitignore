@@ -1,3 +1,10 @@
 .env
 .env.*
 !.env.example
+
+# Debug/test scratch output — never commit ad hoc test scripts or fixtures
+# generated while working on the audio pipeline.
+test-*.js
+test_*.wav
+inspect.js
+*.debug.html

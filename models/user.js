@@ -179,5 +179,6 @@ userSchema.methods.updateStats = function() {
 userSchema.index({ 'stats.score': -1 });
 userSchema.index({ 'profile.city': 1 });
 userSchema.index({ role: 1, createdAt: -1 });
+userSchema.index({ isActive: 1, role: 1, 'stats.score': -1 });
 
 module.exports = mongoose.model('User', userSchema);

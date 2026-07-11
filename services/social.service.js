@@ -241,18 +241,19 @@ const createSharePost = async ({ authorId, targetType, targetId, text = '' }) =>
   return post;
 };
 
-const fetchWallPosts = async ({ userId, viewerId = null, limit = 20 }) => {
+const fetchWallPosts = async ({ userId, viewerId = null, limit = 20, skip = 0 }) => {
   const posts = await SocialPost.find({ author: userId, visibility: 'public' })
     .populate('author', PUBLIC_USER_FIELDS)
     .populate('comments.user', PUBLIC_USER_FIELDS)
     .sort({ createdAt: -1 })
+    .skip(skip)
     .limit(limit)
     .lean(false);
 
   return posts.map((post) => serializePost(post, viewerId));
 };
 
-const fetchFollowingFeed = async ({ viewer, limit = 24 }) => {
+const fetchFollowingFeed = async ({ viewer, limit = 24, skip = 0 }) => {
   const viewerDoc = viewer?._id ? viewer : await User.findById(viewer).select('stats.following');
   const authorIds = Array.from(new Set([
     String(viewerDoc?._id || viewer),
@@ -266,6 +267,7 @@ const fetchFollowingFeed = async ({ viewer, limit = 24 }) => {
     .populate('author', PUBLIC_USER_FIELDS)
     .populate('comments.user', PUBLIC_USER_FIELDS)
     .sort({ createdAt: -1 })
+    .skip(skip)
     .limit(limit)
     .lean(false);
 

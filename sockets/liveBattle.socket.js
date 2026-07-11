@@ -1,5 +1,7 @@
 const jwt = require('jsonwebtoken');
+const mongoose = require('mongoose');
 const User = require('../models/user');
+const Battle = require('../models/battle');
 
 module.exports = (io) => {
   const rooms = new Map();
@@ -44,9 +46,33 @@ module.exports = (io) => {
   io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
     
-    socket.on('join-battle', ({ battleId, userId, username, role }) => {
+    socket.on('join-battle', async ({ battleId, role }) => {
+      if (!mongoose.isValidObjectId(battleId)) {
+        socket.emit('error', 'Invalid battle id');
+        return;
+      }
+
+      // Identity always comes from the authenticated socket, never from the
+      // client payload — otherwise any authenticated socket could impersonate
+      // another user or self-declare a "participant" role it doesn't hold.
+      const userId = String(socket.user._id);
+      const safeUsername = socket.user.username || 'GOMDE';
+      let normalizedRole = normalizeRole(role);
+
+      if (normalizedRole === 'participant') {
+        const battle = await Battle.findById(battleId).select('entries.user');
+        const isBattleParticipant = !!battle?.entries?.some(
+          (entry) => entry.user && entry.user.toString() === userId
+        );
+        if (!isBattleParticipant) {
+          normalizedRole = 'spectator';
+        }
+      }
+
       socket.join(battleId);
-      
+      socket.data.battleId = battleId;
+      socket.data.role = normalizedRole;
+
       if (!rooms.has(battleId)) {
         rooms.set(battleId, {
           participants: [],
@@ -54,14 +80,12 @@ module.exports = (io) => {
           messages: []
         });
       }
-      
+
       const room = rooms.get(battleId);
-      const normalizedRole = normalizeRole(role);
-      const safeUsername = username || 'GOMDE';
 
       room.participants = room.participants.filter((participant) => participant.socketId !== socket.id);
       room.spectators = room.spectators.filter((spectator) => spectator.socketId !== socket.id);
-      
+
       if (normalizedRole === 'participant') {
         if (room.participants.length < 2) {
           room.participants.push({ userId, socketId: socket.id, username: safeUsername, role: normalizedRole });
@@ -74,17 +98,17 @@ module.exports = (io) => {
         room.spectators.push({ userId, socketId: socket.id, username: safeUsername, role: normalizedRole });
         socket.to(battleId).emit('spectator-joined', { userId, username: safeUsername });
       }
-      
+
       rooms.set(battleId, room);
-      
+
       emitRoomState(battleId, room);
       socket.emit('chat-history', room.messages);
     });
 
-    socket.on('send-chat-message', ({ battleId, userId, username, role, message }) => {
+    socket.on('send-chat-message', ({ battleId, message }) => {
       const trimmedMessage = typeof message === 'string' ? message.trim() : '';
 
-      if (!battleId || !trimmedMessage) {
+      if (!battleId || !trimmedMessage || socket.data.battleId !== battleId) {
         return;
       }
 
@@ -95,9 +119,9 @@ module.exports = (io) => {
       }
 
       const chatMessage = buildChatMessage({
-        userId: userId || socket.id,
-        username,
-        role,
+        userId: String(socket.user._id),
+        username: socket.user.username,
+        role: socket.data.role,
         message: trimmedMessage
       });
 
@@ -105,17 +129,27 @@ module.exports = (io) => {
       rooms.set(battleId, room);
       io.to(battleId).emit('chat-message', chatMessage);
     });
-    
-    // WebRTC signaling
-    socket.on('offer', ({ battleId, offer, to }) => {
+
+    // WebRTC signaling — only relay between two sockets that already joined
+    // the same battle room, so an authenticated socket can't target an
+    // arbitrary connected socket id outside its own battle.
+    const sameBattleRoom = (to) => {
+      const target = io.sockets.sockets.get(to);
+      return !!target && !!socket.data.battleId && target.data.battleId === socket.data.battleId;
+    };
+
+    socket.on('offer', ({ offer, to }) => {
+      if (!sameBattleRoom(to)) return;
       socket.to(to).emit('offer', { offer, from: socket.id });
     });
-    
-    socket.on('answer', ({ battleId, answer, to }) => {
+
+    socket.on('answer', ({ answer, to }) => {
+      if (!sameBattleRoom(to)) return;
       socket.to(to).emit('answer', { answer, from: socket.id });
     });
-    
-    socket.on('ice-candidate', ({ battleId, candidate, to }) => {
+
+    socket.on('ice-candidate', ({ candidate, to }) => {
+      if (!sameBattleRoom(to)) return;
       socket.to(to).emit('ice-candidate', { candidate, from: socket.id });
     });
     

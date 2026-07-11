@@ -10,7 +10,11 @@ const AudioTrack = require('../models/audiotrack');
 const {
   normalizeLocationKey,
   resolveRegionFromCity,
+  canonicalRegion,
+  CITY_REGION_PAIRS,
 } = require('../services/location.service');
+
+const escapeRegex = (value) => String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const { buildDisciplinePayload } = require('../constants/disciplines');
 const { getChampionForLeaderboard } = require('../services/champion.service');
 const { calculateOfficialScore } = require('../services/score.service');
@@ -297,68 +301,81 @@ router.get('/leaderboard', protect, buildRouteCache({ ttlMs: 15000 }), async (re
     const safePage = Math.max(1, Number(page) || 1);
     const normalizedCategory = buildDisciplinePayload(category, { fallback: [] }).categories[0] || null;
 
-    const users = await User.find({
+    // Scope filtering pushed into the Mongo query itself instead of loading
+    // every active user into memory and filtering/sorting in JS — the same
+    // pattern that made this endpoint scan the whole table on every
+    // cache-miss (every 15s) as the user base grows.
+    const baseMatch = {
       isActive: true,
       role: { $ne: 'admin' },
       ...(normalizedCategory ? { disciplines: normalizedCategory } : {}),
-    })
-      .select('-password')
-      .lean(false);
+    };
 
-    const filteredUsers = users.filter((user) => {
-      const profile = user.profile || {};
-      const userCity = normalizeLocationKey(profile.city);
-      const userNeighborhood = normalizeLocationKey(profile.neighborhood);
-      const userRegion = normalizeLocationKey(safeResolveUserRegion(user));
-
-      if (normalizedScope === 'city') {
-        return city ? userCity === normalizeLocationKey(city) : !!userCity;
-      }
-
-      if (normalizedScope === 'neighborhood') {
-        if (!neighborhood) {
-          return false;
+    let scopeMatch = {};
+    if (normalizedScope === 'city') {
+      scopeMatch = city
+        ? { 'profile.city': new RegExp(`^${escapeRegex(city)}$`, 'i') }
+        : { 'profile.city': { $exists: true, $nin: [null, ''] } };
+    } else if (normalizedScope === 'neighborhood') {
+      if (!neighborhood) {
+        // Mirrors the previous behaviour: no neighborhood given → nobody qualifies.
+        scopeMatch = { _id: null };
+      } else {
+        scopeMatch = { 'profile.neighborhood': new RegExp(`^${escapeRegex(neighborhood)}$`, 'i') };
+        if (city) {
+          scopeMatch = {
+            $and: [scopeMatch, { 'profile.city': new RegExp(`^${escapeRegex(city)}$`, 'i') }],
+          };
         }
-
-        const matchesNeighborhood = userNeighborhood === normalizeLocationKey(neighborhood);
-        if (!city) {
-          return matchesNeighborhood;
-        }
-
-        return matchesNeighborhood && userCity === normalizeLocationKey(city);
       }
-
-      if (normalizedScope === 'region') {
-        return region ? userRegion === normalizeLocationKey(region) : !!userRegion;
+    } else if (normalizedScope === 'region') {
+      const knownCities = CITY_REGION_PAIRS.map(([cityName]) => cityName);
+      if (region) {
+        const canonicalRegionName = canonicalRegion(region) || region;
+        const citiesInRegion = CITY_REGION_PAIRS
+          .filter(([, regionName]) => normalizeLocationKey(regionName) === normalizeLocationKey(canonicalRegionName))
+          .map(([cityName]) => cityName);
+        scopeMatch = {
+          $or: [
+            { 'profile.region': new RegExp(`^${escapeRegex(canonicalRegionName)}$`, 'i') },
+            { 'profile.city': { $in: citiesInRegion } },
+          ],
+        };
+      } else {
+        scopeMatch = {
+          $or: [
+            { 'profile.region': { $exists: true, $nin: [null, ''] } },
+            { 'profile.city': { $in: knownCities } },
+          ],
+        };
       }
+    }
 
-      return true;
-    });
+    const match = { ...baseMatch, ...scopeMatch };
 
-    filteredUsers.sort((left, right) => {
-      const leftScore = calculateOfficialScore(left?.stats);
-      const rightScore = calculateOfficialScore(right?.stats);
-      if (rightScore !== leftScore) return rightScore - leftScore;
+    const [total, pageOfUsers] = await Promise.all([
+      User.countDocuments(match),
+      User.find(match)
+        .select('-password')
+        .sort({ 'stats.score': -1, 'stats.battles.wins': -1, 'stats.totalViews': -1, createdAt: 1 })
+        .skip((safePage - 1) * safeLimit)
+        .limit(safeLimit),
+    ]);
 
-      const leftWins = Number(left?.stats?.battles?.wins || 0);
-      const rightWins = Number(right?.stats?.battles?.wins || 0);
-      if (rightWins !== leftWins) return rightWins - leftWins;
+    const rankOffset = (safePage - 1) * safeLimit;
+    const pagedUsers = pageOfUsers.map((user, index) => buildLeaderboardRow(user, rankOffset + index + 1));
 
-      const leftViews = Number(left?.stats?.totalViews || 0);
-      const rightViews = Number(right?.stats?.totalViews || 0);
-      if (rightViews !== leftViews) return rightViews - leftViews;
-
-      return new Date(left.createdAt).getTime() - new Date(right.createdAt).getTime();
-    });
-
-    const rankedUsers = filteredUsers.map((user, index) => buildLeaderboardRow(user, index + 1));
-    const pagedUsers = rankedUsers.slice((safePage - 1) * safeLimit, safePage * safeLimit);
     const championLevel = normalizedScope === 'neighborhood'
       ? 'sector'
       : normalizedScope === 'region'
       ? 'regional'
       : 'national';
-    const championUser = filteredUsers[0] || null;
+    // The champion badge only needs the single top-ranked user for this
+    // scope, so it's fetched with its own tiny query rather than requiring
+    // the full match set in memory.
+    const championUser = normalizedCategory
+      ? await User.findOne(match).select('-password').sort({ 'stats.score': -1 })
+      : null;
     const champion = normalizedCategory && championUser
       ? await getChampionForLeaderboard({
           category: normalizedCategory,
@@ -372,9 +389,9 @@ router.get('/leaderboard', protect, buildRouteCache({ ttlMs: 15000 }), async (re
       category: normalizedCategory,
       champion,
       users: pagedUsers,
-      total: rankedUsers.length,
+      total,
       currentPage: safePage,
-      totalPages: Math.max(1, Math.ceil(rankedUsers.length / safeLimit)),
+      totalPages: Math.max(1, Math.ceil(total / safeLimit)),
       filters: {
         city: city || null,
         neighborhood: neighborhood || null,
