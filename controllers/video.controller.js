@@ -13,6 +13,7 @@ const {
 const { createVideoThumbnail, transcodeFeedVideo, safeUnlink } = require('../services/videoTranscode.service');
 const { recomputeUserScoreById } = require('../services/score.service');
 const { createSharePost, syncPublicationPost } = require('../services/social.service');
+const { notify } = require('../services/notification.service');
 
 const resolveUploadFilePath = (value, subdirectory, fallbackName) => {
   const candidate = typeof value === 'string' && value.trim().length > 0
@@ -211,12 +212,17 @@ exports.uploadVideo = async (req, res) => {
 
 exports.getVideos = async (req, res) => {
   try {
-    const { page = 1, limit = 10, userId, battleId } = req.query;
+    const { page = 1, limit = 10, userId, battleId, search } = req.query;
     const query = { isPublished: true };
-    
+
     if (userId) query.user = userId;
     if (battleId) query.battleId = battleId;
-    
+    if (search) {
+      const safe = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: safe, $options: 'i' };
+      query.$or = [{ title: regex }, { description: regex }, { tags: regex }];
+    }
+
     const videos = await Video.find(query)
       .populate('user', 'username profile.avatar stats.score')
       .sort({ createdAt: -1 })
@@ -297,14 +303,24 @@ exports.likeVideo = async (req, res) => {
     }
     
     const result = await video.toggleLike(req.user._id);
-    
+
     // Update user stats
     await User.findByIdAndUpdate(video.user, {
       $inc: { 'stats.totalLikes': result.liked ? 1 : -1 }
     });
 
     await recomputeUserScoreById(video.user);
-    
+
+    if (result.liked) {
+      await notify({
+        recipient: video.user,
+        actor: req.user._id,
+        type: 'like',
+        targetType: 'video',
+        targetId: video._id,
+      });
+    }
+
     res.json(result);
   } catch (error) {
     console.error(error);
@@ -325,12 +341,20 @@ exports.commentVideo = async (req, res) => {
       user: req.user._id,
       text
     });
-    
+
     await video.save();
-    
+
+    await notify({
+      recipient: video.user,
+      actor: req.user._id,
+      type: 'comment',
+      targetType: 'video',
+      targetId: video._id,
+    });
+
     const populatedVideo = await Video.findById(video._id)
       .populate('comments.user', 'username profile.avatar');
-    
+
     res.json(populatedVideo.comments);
   } catch (error) {
     console.error(error);

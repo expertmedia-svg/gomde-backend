@@ -263,6 +263,7 @@ const liveRoutes = require('./routes/live.routes');
 const gomdeOrRoutes = require('./routes/gomdeOr.routes');
 const gocoRoutes = require('./routes/goco.routes');
 const socialRoutes = require('./routes/social.routes');
+const notificationRoutes = require('./routes/notification.routes');
 const { storageSummary } = require('./services/mediaStorage.service');
 
 // Health check
@@ -398,6 +399,7 @@ app.use('/api/live', liveRoutes);
 app.use('/api/gomde-or', gomdeOrRoutes);
 app.use('/api/goco', gocoRoutes);
 app.use('/api/social', socialRoutes);
+app.use('/api/notifications', notificationRoutes);
 
 // Socket.io for live battles
 require('./sockets/liveBattle.socket')(io);
@@ -411,21 +413,36 @@ app.use((err, req, res, next) => {
   });
 });
 
-// MongoDB connection with pool config
-mongoose.connect(process.env.MONGODB_URI, {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-  maxPoolSize: Math.max(10, Number(process.env.MONGODB_MAX_POOL_SIZE) || 60),
-  minPoolSize: Math.max(1, Number(process.env.MONGODB_MIN_POOL_SIZE) || 5),
-  serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
-  socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000,
-  maxIdleTimeMS: Number(process.env.MONGODB_MAX_IDLE_TIME_MS) || 30000,
-})
-.then(() => console.log('MongoDB connected successfully'))
-.catch((err) => {
-  console.error('MongoDB connection error:', err);
-  process.exit(1);
-});
+// MongoDB connection with pool config. A transient DNS/network blip on the
+// first attempt (common with mongodb+srv:// SRV lookups) used to call
+// process.exit(1) immediately, which under PM2 produced a tight crash-restart
+// loop instead of just retrying. Retry with backoff before giving up.
+const connectMongoWithRetry = async (attempt = 1) => {
+  const maxAttempts = Number(process.env.MONGODB_CONNECT_MAX_ATTEMPTS) || 8;
+  try {
+    await mongoose.connect(process.env.MONGODB_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      maxPoolSize: Math.max(10, Number(process.env.MONGODB_MAX_POOL_SIZE) || 60),
+      minPoolSize: Math.max(1, Number(process.env.MONGODB_MIN_POOL_SIZE) || 5),
+      serverSelectionTimeoutMS: Number(process.env.MONGODB_SERVER_SELECTION_TIMEOUT_MS) || 5000,
+      socketTimeoutMS: Number(process.env.MONGODB_SOCKET_TIMEOUT_MS) || 45000,
+      maxIdleTimeMS: Number(process.env.MONGODB_MAX_IDLE_TIME_MS) || 30000,
+    });
+    console.log('MongoDB connected successfully');
+  } catch (err) {
+    console.error(`MongoDB connection error (attempt ${attempt}/${maxAttempts}):`, err.message);
+    if (attempt >= maxAttempts) {
+      console.error('MongoDB connection failed after max attempts, exiting.');
+      process.exit(1);
+      return;
+    }
+    const delayMs = Math.min(30000, 1000 * 2 ** (attempt - 1));
+    setTimeout(() => connectMongoWithRetry(attempt + 1), delayMs);
+  }
+};
+
+connectMongoWithRetry();
 
 mongoose.connection.on('error', (err) => {
   console.error('MongoDB runtime error:', err);

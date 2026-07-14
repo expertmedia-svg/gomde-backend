@@ -6,6 +6,7 @@ const audioTrackSchema = new mongoose.Schema({
     type: String,
     required: true
   },
+  description: String,
   artist: String,
   genre: String,
   primaryCategory: {

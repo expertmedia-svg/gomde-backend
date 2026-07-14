@@ -7,6 +7,7 @@ const { renderStudioMix } = require('../services/audioMix.service');
 const { grantGocoReward } = require('../services/goco.service');
 const { deleteStoredFile, uploadLocalFile } = require('../services/mediaStorage.service');
 const { recomputeUserScoreById } = require('../services/score.service');
+const { notify } = require('../services/notification.service');
 const { createSharePost, syncPublicationPost } = require('../services/social.service');
 
 const safeRemoveStudioFile = async (filePath) => {
@@ -417,8 +418,14 @@ exports.getUserRecordings = async (req, res) => {
 
 exports.getCommunityRecordings = async (req, res) => {
   try {
-    const { userId, limit = 24 } = req.query;
+    const { userId, limit = 24, search } = req.query;
     const safeLimit = Math.min(50, Math.max(1, Number(limit) || 24));
+    let searchMatch = {};
+    if (search) {
+      const safe = search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = { $regex: safe, $options: 'i' };
+      searchMatch = { $or: [{ title: regex }, { artist: regex }, { genre: regex }] };
+    }
 
     const recordings = await AudioTrack.find({
       instrumental: false,
@@ -428,6 +435,7 @@ exports.getCommunityRecordings = async (req, res) => {
       // community recording and filtering client-side — a profile page view
       // used to pay the cost of the entire community collection.
       ...(userId ? { user: userId } : {}),
+      ...searchMatch,
     })
       .populate('user', 'username profile.city profile.neighborhood')
       .sort({ createdAt: -1 })
@@ -463,6 +471,15 @@ exports.publishRecording = async (req, res) => {
           contentType: req.file.mimetype,
         })
       ).publicUrl;
+    }
+
+    const title = typeof req.body.title === 'string' ? req.body.title.trim() : '';
+    const description = typeof req.body.description === 'string' ? req.body.description.trim() : '';
+    if (title) {
+      recording.title = title;
+    }
+    if (description) {
+      recording.description = description;
     }
 
     recording.shareToCommunity = true;
@@ -550,6 +567,16 @@ exports.toggleRecordingLike = async (req, res) => {
         $inc: { 'stats.totalLikes': liked ? 1 : -1 }
       });
       await recomputeUserScoreById(recording.user._id);
+
+      if (liked) {
+        await notify({
+          recipient: recording.user._id,
+          actor: req.user._id,
+          type: 'like',
+          targetType: 'audio',
+          targetId: recording._id,
+        });
+      }
     }
 
     res.json({ liked, likes: recording.likes.length });
@@ -577,6 +604,16 @@ exports.commentRecording = async (req, res) => {
       text,
     });
     await recording.save();
+
+    if (recording.user?._id) {
+      await notify({
+        recipient: recording.user._id,
+        actor: req.user._id,
+        type: 'comment',
+        targetType: 'audio',
+        targetId: recording._id,
+      });
+    }
 
     const populatedRecording = await AudioTrack.findById(recording._id)
       .populate('comments.user', 'username profile.avatar profile.city profile.neighborhood');

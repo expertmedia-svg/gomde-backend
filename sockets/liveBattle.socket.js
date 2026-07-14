@@ -45,7 +45,13 @@ module.exports = (io) => {
   
   io.on('connection', (socket) => {
     console.log('New client connected:', socket.id);
-    
+
+    // Personal room used to deliver targeted events (battle challenges,
+    // vote/accept/refuse notifications, ...) to this specific user across
+    // every tab/device they have open, regardless of which battle room
+    // (if any) they've joined.
+    socket.join(`user_${socket.user._id}`);
+
     socket.on('join-battle', async ({ battleId, role }) => {
       if (!mongoose.isValidObjectId(battleId)) {
         socket.emit('error', 'Invalid battle id');

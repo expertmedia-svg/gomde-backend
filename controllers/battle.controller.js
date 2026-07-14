@@ -8,6 +8,7 @@ const { uploadLocalFile } = require('../services/mediaStorage.service');
 const { applyBattleOutcomeStats, awardBattleVote } = require('../services/score.service');
 const { markBattleLive, syncBattleLifecycle } = require('../services/battleLifecycle.service');
 const { updateScoresFromBattle, autoRegisterFromBattle } = require('./gomdeOr.controller');
+const { notify } = require('../services/notification.service');
 
 const normalizeObjectId = (value) => {
   if (typeof value !== 'string') {
@@ -133,6 +134,16 @@ exports.createBattle = async (req, res) => {
 
     // GOMDE D'OR : auto-inscrire les participants
     autoRegisterFromBattle(battle._id).catch(() => {});
+
+    if (challenger) {
+      notify({
+        recipient: challenger._id,
+        actor: req.user._id,
+        type: 'challenge',
+        targetType: 'battle',
+        targetId: battle._id,
+      }).catch(() => {});
+    }
   } catch (error) {
     return handleBattleError(res, error);
   }
@@ -258,6 +269,13 @@ exports.acceptChallenge = async (req, res) => {
         },
       });
     }
+    notify({
+      recipient: battle.creator,
+      actor: req.user._id,
+      type: 'battle_accepted',
+      targetType: 'battle',
+      targetId: battle._id,
+    }).catch(() => {});
 
     const populated = await populateBattle(Battle.findById(battle._id));
     res.json(populated);
@@ -296,6 +314,13 @@ exports.refuseChallenge = async (req, res) => {
         title: battle.title,
       });
     }
+    notify({
+      recipient: battle.creator,
+      actor: req.user._id,
+      type: 'battle_refused',
+      targetType: 'battle',
+      targetId: battle._id,
+    }).catch(() => {});
 
     res.json(battle);
   } catch (error) {
@@ -521,6 +546,14 @@ exports.vote = async (req, res) => {
     }
 
     await awardBattleVote(normalizedVotedFor);
+
+    notify({
+      recipient: normalizedVotedFor,
+      actor: req.user._id,
+      type: 'vote',
+      targetType: 'battle',
+      targetId: updatedBattle._id,
+    }).catch(() => {});
 
     const io = req.app.get('io');
     if (io) {

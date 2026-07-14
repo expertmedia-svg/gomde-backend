@@ -19,6 +19,7 @@ const { buildDisciplinePayload } = require('../constants/disciplines');
 const { getChampionForLeaderboard } = require('../services/champion.service');
 const { calculateOfficialScore } = require('../services/score.service');
 const { toPublicMediaUrl } = require('../services/mediaStorage.service');
+const { notify } = require('../services/notification.service');
 
 const resolveUserRegion = (user) => {
   const profile = user.profile || {};
@@ -595,7 +596,17 @@ router.post('/:id/follow', protect, followLimiter, async (req, res) => {
     
     await currentUser.save();
     await userToFollow.save();
-    
+
+    if (!isFollowing) {
+      await notify({
+        recipient: userToFollow._id,
+        actor: currentUser._id,
+        type: 'follow',
+        targetType: 'user',
+        targetId: currentUser._id,
+      });
+    }
+
     res.json({ following: !isFollowing });
   } catch (error) {
     console.error(error);
