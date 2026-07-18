@@ -52,7 +52,7 @@ test('markBattleLive opens live window with strict deadlines', () => {
 
   assert.equal(battle.status, 'active');
   assert.equal(battle.lifecycle.inLiveFeed, true);
-  assert.equal(battle.voteDeadline.toISOString(), '2026-04-16T12:00:00.000Z');
+  assert.equal(battle.voteDeadline.toISOString(), '2026-04-17T12:00:00.000Z');
 });
 
 test('battle voting expiration returns zero when deadline is passed', () => {

@@ -2,8 +2,8 @@ const mongoose = require('mongoose');
 const { buildDisciplinePayload, DISCIPLINE_REGISTRY, normalizeDisciplineList } = require('../constants/disciplines');
 
 // ── Timing constants ─────────────────────────────────────────────────
-const SUBMISSION_WINDOW_MS = 24 * 60 * 60 * 1000; // 24 h pour soumettre sa vidéo
-const VOTING_WINDOW_MS = 6 * 24 * 60 * 60 * 1000; // 6 jours de vote
+const SUBMISSION_WINDOW_MS = 48 * 60 * 60 * 1000; // 48 h pour soumettre sa vidéo
+const VOTING_WINDOW_MS = 7 * 24 * 60 * 60 * 1000; // 7 jours de vote
 
 const battleSchema = new mongoose.Schema({
   title: {
