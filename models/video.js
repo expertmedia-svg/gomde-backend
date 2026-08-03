@@ -31,7 +31,20 @@ const videoSchema = new mongoose.Schema({
   },
   videoUrl: {
     type: String,
-    required: true
+    required: false,
+    default: ''
+  },
+  // 'processing' while ffmpeg/storage work happens in the background after
+  // upload; feed/list queries must filter on status:'ready' so in-flight or
+  // failed uploads never leak into what users see.
+  status: {
+    type: String,
+    enum: ['processing', 'ready', 'failed'],
+    default: 'ready'
+  },
+  processingError: {
+    type: String,
+    default: ''
   },
   videoPublicId: String,
   uploadChecksum: String,
@@ -93,7 +106,7 @@ const videoSchema = new mongoose.Schema({
 
 // ── Indexes ──────────────────────────────────────────────────────────
 videoSchema.index({ user: 1, createdAt: -1 });
-videoSchema.index({ isPublished: 1, createdAt: -1 });
+videoSchema.index({ isPublished: 1, status: 1, createdAt: -1 });
 videoSchema.index({ battleId: 1 });
 videoSchema.index({ categories: 1, createdAt: -1 });
 

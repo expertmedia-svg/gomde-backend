@@ -17,6 +17,7 @@ exports.getSmartFeed = async (req, res) => {
     // Pour toi is intentionally biased toward fresh and relevant content instead of raw popularity.
     const candidateVideos = await Video.find({
       isPublished: true,
+      status: 'ready',
       createdAt: { $gte: recentWindowStart },
     })
       .populate('user', 'username profile.avatar stats.score profile.city')
@@ -26,13 +27,13 @@ exports.getSmartFeed = async (req, res) => {
 
     const videos = candidateVideos.length >= parsedLimit
       ? candidateVideos
-      : await Video.find({ isPublished: true })
+      : await Video.find({ isPublished: true, status: 'ready' })
         .populate('user', 'username profile.avatar stats.score profile.city')
         .sort({ createdAt: -1 })
         .limit(candidateLimit)
         .lean();
-    
-    const totalVideos = await Video.countDocuments({ isPublished: true });
+
+    const totalVideos = await Video.countDocuments({ isPublished: true, status: 'ready' });
     
     // Calculate personalized score and then paginate after ranking so the order differs from Tendance.
     const scoredVideos = videos.map(video => {
@@ -54,8 +55,8 @@ exports.getSmartFeed = async (req, res) => {
       if (userLocation && video.user?.profile?.city === userLocation) {
         locationBoost = 70;
       }
-      
-      const score = 
+
+      const rawScore =
         (likes * 3.2) +
         (views * 0.04) +
         (comments * 7) +
@@ -66,7 +67,17 @@ exports.getSmartFeed = async (req, res) => {
         creatorBoost +
         locationBoost -
         trendingPenalty;
-      
+
+      // Debut boost: a brand-new video has had no time to accrue engagement,
+      // so freshnessBoost alone doesn't guarantee it beats an older video
+      // with modest sustained engagement. Floor (not additive) so it only
+      // helps videos that would otherwise underperform on their own merits,
+      // and a debut video that's already going viral still uses its real score.
+      const DEBUT_GRACE_HOURS = 2;
+      const DEBUT_FLOOR_SCORE = 340;
+      const debutBoost = hoursSinceCreation <= DEBUT_GRACE_HOURS ? DEBUT_FLOOR_SCORE : 0;
+      const score = Math.max(rawScore, debutBoost);
+
       return { ...video, score };
     });
     
@@ -106,13 +117,13 @@ exports.getTrending = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const videos = await Video.find({ isPublished: true })
+    const videos = await Video.find({ isPublished: true, status: 'ready' })
       .populate('user', 'username profile.avatar profile.city')
       .sort({ views: -1, createdAt: -1 })
       .skip(skip)
       .limit(parseInt(limit))
       .lean();
-    
+
     // Ensure all video URLs are absolute
     const enrichedVideos = videos.map(video => ({
       ...video,
@@ -120,7 +131,7 @@ exports.getTrending = async (req, res) => {
       thumbnailUrl: toPublicMediaUrl(req, video.thumbnailUrl)
     }));
 
-    const total = await Video.countDocuments({ isPublished: true });
+    const total = await Video.countDocuments({ isPublished: true, status: 'ready' });
     
     res.json({
       videos: enrichedVideos,
@@ -144,7 +155,7 @@ exports.getLocalContent = async (req, res) => {
     
     // Use aggregation to filter by user location in DB instead of loading all videos
     const localVideos = await Video.aggregate([
-      { $match: { isPublished: true } },
+      { $match: { isPublished: true, status: 'ready' } },
       { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'userDoc' } },
       { $unwind: '$userDoc' },
       { $match: { 'userDoc.profile.city': { $regex: new RegExp(`^${userLocation.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, 'i') } } },

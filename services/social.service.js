@@ -64,7 +64,7 @@ const resolveTargetPreview = async ({ targetType, targetId }) => {
   }
 
   if (targetType === 'video') {
-    const video = await Video.findOne({ _id: targetId, isPublished: true })
+    const video = await Video.findOne({ _id: targetId, isPublished: true, status: 'ready' })
       .populate('user', PUBLIC_USER_FIELDS)
       .lean(false);
     if (!video) {

@@ -2,18 +2,17 @@ const Video = require('../models/video');
 const User = require('../models/user');
 const path = require('path');
 const { buildDisciplinePayload } = require('../constants/disciplines');
-const { buildFileIntegrity } = require('../services/fileIntegrity.service');
 const { grantGocoReward } = require('../services/goco.service');
 const {
   deleteStoredFile,
   resolveLocalUploadPath,
   toPublicMediaUrl,
-  uploadLocalFile,
 } = require('../services/mediaStorage.service');
-const { createVideoThumbnail, transcodeFeedVideo, safeUnlink } = require('../services/videoTranscode.service');
+const { safeUnlink } = require('../services/videoTranscode.service');
 const { recomputeUserScoreById } = require('../services/score.service');
-const { createSharePost, syncPublicationPost } = require('../services/social.service');
+const { createSharePost } = require('../services/social.service');
 const { notify } = require('../services/notification.service');
+const { processUploadedVideo } = require('../services/videoProcessing.service');
 
 const resolveUploadFilePath = (value, subdirectory, fallbackName) => {
   const candidate = typeof value === 'string' && value.trim().length > 0
@@ -53,89 +52,22 @@ const ensureAbsoluteUrls = (video, req) => {
 };
 
 exports.uploadVideo = async (req, res) => {
-  const createdFiles = [];
-
   try {
     if (!req.file) {
       return res.status(400).json({ message: 'No video file uploaded' });
     }
-    
+
     const { title, description, tags, type, category, categories } = req.body;
     const normalizedType = type === 'battle' ? 'battle' : 'freestyle';
     const normalizedCategories = buildDisciplinePayload(categories || category);
     const normalizedTitle = title?.trim() ||
       (normalizedType === 'battle' ? 'Battle instant' : 'Freestyle instant');
     const sourcePath = req.file.path;
-    const sourceFilename = path.basename(sourcePath);
-    const sourceExtension = path.extname(sourceFilename).toLowerCase();
-    const integrity = await buildFileIntegrity(req.file);
-    let asset = null;
-    let usedTranscodeFallback = false;
 
-    try {
-      const outputBasename = `${path.parse(req.file.filename).name}-mobile`;
-      const transcoded = await transcodeFeedVideo({
-        inputPath: sourcePath,
-        outputBasename,
-      });
-
-      createdFiles.push(transcoded.outputPath, transcoded.thumbnailPath);
-      await safeUnlink(sourcePath);
-
-      asset = {
-        videoFilename: transcoded.outputFilename,
-        thumbnailFilename: transcoded.thumbnailFilename,
-      };
-    } catch (transcodeError) {
-      console.warn('Feed video transcode failed, evaluating fallback:', transcodeError.message);
-
-      if (sourceExtension !== '.mp4') {
-        await safeUnlink(sourcePath);
-        return res.status(422).json({
-          message: 'La vidéo n’a pas pu être convertie vers un format mobile compatible. Réessaie avec une nouvelle capture.',
-        });
-      }
-
-      usedTranscodeFallback = true;
-      let thumbnailFilename = null;
-
-      try {
-        thumbnailFilename = `${path.parse(sourceFilename).name}.jpg`;
-        const thumbnailPath = path.join(
-          path.dirname(path.dirname(sourcePath)),
-          'thumbnails',
-          thumbnailFilename
-        );
-        await createVideoThumbnail({ inputPath: sourcePath, thumbnailPath });
-        createdFiles.push(thumbnailPath);
-      } catch (thumbnailError) {
-        console.warn('Feed thumbnail fallback failed:', thumbnailError.message);
-        thumbnailFilename = null;
-      }
-
-      asset = {
-        videoFilename: sourceFilename,
-        thumbnailFilename,
-      };
-    }
-    
-    const storedVideo = await uploadLocalFile({
-      req,
-      localPath: resolveLocalUploadPath('videos', asset.videoFilename),
-      subdirectory: 'videos',
-      fileName: asset.videoFilename,
-      contentType: sourceExtension === '.webm' ? 'video/webm' : 'video/mp4',
-    });
-    const storedThumbnail = asset.thumbnailFilename
-      ? await uploadLocalFile({
-          req,
-          localPath: resolveLocalUploadPath('thumbnails', asset.thumbnailFilename),
-          subdirectory: 'thumbnails',
-          fileName: asset.thumbnailFilename,
-          contentType: 'image/jpeg',
-        })
-      : null;
-    
+    // Fast path: create the doc as 'processing' and respond immediately.
+    // The checksum/transcode/thumbnail/storage pipeline runs afterward in
+    // the background (see processUploadedVideo) so the client isn't stuck
+    // waiting on ffmpeg before it gets a response.
     const video = await Video.create({
       title: normalizedTitle,
       type: normalizedType,
@@ -143,64 +75,23 @@ exports.uploadVideo = async (req, res) => {
       categories: normalizedCategories.categories,
       description,
       user: req.user._id,
-      videoUrl: storedVideo.publicUrl,
-      videoPublicId: storedVideo.objectKey || asset.videoFilename,
-      uploadChecksum: integrity?.checksum || '',
-      uploadSizeBytes: integrity?.sizeBytes || 0,
-      uploadMimeType: integrity?.mimeType || '',
-      thumbnailUrl: storedThumbnail?.publicUrl || '',
-      tags: tags ? tags.split(',') : []
+      videoUrl: '',
+      status: 'processing',
+      tags: tags ? tags.split(',') : [],
     });
 
-    if (usedTranscodeFallback) {
-      console.warn(
-        '[feed-video] fallback mp4 used',
-        JSON.stringify({
-          userId: String(req.user._id),
-          sourceFilename,
-          storedFilename: asset.videoFilename,
-        })
-      );
-    } else {
-      console.info(
-        '[feed-video] transcoded',
-        JSON.stringify({
-          userId: String(req.user._id),
-          sourceFilename,
-          storedFilename: asset.videoFilename,
-        })
-      );
-    }
-
-    try {
-      await syncPublicationPost({
-        authorId: req.user._id,
-        targetType: 'video',
-        targetId: video._id,
-        text: description || normalizedTitle,
-      });
-    } catch (syncError) {
-      // The video itself is already saved and publicly queryable at this point.
-      // A failure to sync the social-feed post must not turn into a 500 that
-      // makes the client believe the whole upload failed (and possibly retry it).
-      console.error('[feed-video] syncPublicationPost failed', syncError);
-    }
-
-    res.status(201).json({
+    res.status(202).json({
       ...video.toObject(),
-      processingFallback: usedTranscodeFallback,
+      status: 'processing',
+    });
+
+    processUploadedVideo({ video, req, sourcePath, description, tags }).catch((err) => {
+      console.error('[feed-video] processUploadedVideo crashed', err);
     });
   } catch (error) {
     if (req.file?.path) {
       try {
         await safeUnlink(req.file.path);
-      } catch (cleanupError) {
-        console.error(cleanupError);
-      }
-    }
-    for (const filePath of createdFiles) {
-      try {
-        await safeUnlink(filePath);
       } catch (cleanupError) {
         console.error(cleanupError);
       }
@@ -213,7 +104,7 @@ exports.uploadVideo = async (req, res) => {
 exports.getVideos = async (req, res) => {
   try {
     const { page = 1, limit = 10, userId, battleId, search } = req.query;
-    const query = { isPublished: true };
+    const query = { isPublished: true, status: 'ready' };
 
     if (userId) query.user = userId;
     if (battleId) query.battleId = battleId;

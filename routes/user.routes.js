@@ -177,7 +177,7 @@ const buildSavedContentFeed = async (req, savedContent = []) => {
 
   const [videos, recordings] = await Promise.all([
     videoIds.length
-      ? Video.find({ _id: { $in: videoIds }, isPublished: true })
+      ? Video.find({ _id: { $in: videoIds }, isPublished: true, status: 'ready' })
           .populate('user', 'username primaryDiscipline profile.avatar profile.city profile.region')
           .populate('comments.user', 'username profile.avatar')
           .lean()
@@ -443,7 +443,7 @@ router.post('/me/favorites/toggle', protect, favoritesLimiter, async (req, res) 
           shareToCommunity: true,
           isPublic: true,
         })
-      : await Video.exists({ _id: targetId, isPublished: true });
+      : await Video.exists({ _id: targetId, isPublished: true, status: 'ready' });
 
     if (!targetExists) {
       return res.status(404).json({ message: 'Content not found' });
@@ -501,7 +501,7 @@ router.post('/me/favorites/import', protect, favoritesLimiter, async (req, res) 
 
     const [validVideos, validAudios] = await Promise.all([
       videoIds.length
-        ? Video.find({ _id: { $in: videoIds }, isPublished: true }).select('_id').lean()
+        ? Video.find({ _id: { $in: videoIds }, isPublished: true, status: 'ready' }).select('_id').lean()
         : [],
       audioIds.length
         ? AudioTrack.find({
