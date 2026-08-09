@@ -5,7 +5,7 @@ const { buildDisciplinePayload } = require('../constants/disciplines');
 const { buildFileIntegrity } = require('../services/fileIntegrity.service');
 const { renderStudioMix } = require('../services/audioMix.service');
 const { grantGocoReward } = require('../services/goco.service');
-const { deleteStoredFile, uploadLocalFile } = require('../services/mediaStorage.service');
+const { deleteStoredFile, uploadLocalFile, storageDriver } = require('../services/mediaStorage.service');
 const { recomputeUserScoreById } = require('../services/score.service');
 const { notify } = require('../services/notification.service');
 const { createSharePost, syncPublicationPost } = require('../services/social.service');
@@ -100,7 +100,80 @@ const safeJsonParse = (value, fallback) => {
   }
 };
 
+// Resolves an AudioTrack's audioUrl (relative "/uploads/<sub>/<file>" or an
+// absolute "https://host/uploads/<sub>/<file>" built by toPublicMediaUrl) back
+// to the local file it should point at, so we can check the file actually
+// still exists on disk. Returns null when the URL isn't a recognizable local
+// upload path (e.g. it points at S3/CDN) — callers must treat that as
+// "can't verify" rather than "missing".
+const resolveInstrumentalLocalPath = (audioUrl) => {
+  if (typeof audioUrl !== 'string' || audioUrl.trim().length === 0) {
+    return null;
+  }
+
+  let pathname = audioUrl.trim();
+  if (/^https?:\/\//i.test(pathname)) {
+    try {
+      pathname = new URL(pathname).pathname;
+    } catch (error) {
+      return null;
+    }
+  }
+
+  const match = pathname.match(/^\/uploads\/([^/]+)\/(.+)$/);
+  if (!match) {
+    return null;
+  }
+
+  const [, subdirectory, encodedFileName] = match;
+  let fileName = encodedFileName;
+  try {
+    fileName = decodeURIComponent(encodedFileName);
+  } catch (error) {
+    // keep the raw (possibly already-decoded) name
+  }
+
+  return path.join(__dirname, '..', 'uploads', subdirectory, fileName);
+};
+
+// Purges AudioTrack instrumental records whose backing audio file no longer
+// exists on disk (whatever their source: auto-synced from uploads/instru/, or
+// uploaded individually via the admin endpoint into uploads/audio/). This is
+// what actually stops "ghost" catalogue entries from being served and 404ing
+// on every download attempt — unlike a folder-diff, it self-heals even when
+// the whole folder is empty (total data loss) and covers admin uploads too.
+// Skipped entirely when media is stored remotely (S3), since local
+// fs.existsSync can't verify those.
+const purgeOrphanedInstrumentals = async () => {
+  if (storageDriver() !== 'local') {
+    return { checked: 0, purged: 0 };
+  }
+
+  const tracks = await AudioTrack.find({ instrumental: true }).select('_id audioUrl');
+  const orphanedIds = [];
+
+  for (const track of tracks) {
+    const localPath = resolveInstrumentalLocalPath(track.audioUrl);
+    if (localPath && !fs.existsSync(localPath)) {
+      orphanedIds.push(track._id);
+    }
+  }
+
+  if (orphanedIds.length > 0) {
+    await AudioTrack.deleteMany({ _id: { $in: orphanedIds } });
+  }
+
+  return { checked: tracks.length, purged: orphanedIds.length };
+};
+
+// Exported so the one-off backend/purge-orphaned-instrumentals.js script can
+// run this cleanup directly without waiting for a GET /studio/instrumentals
+// request to trigger it.
+exports.purgeOrphanedInstrumentals = purgeOrphanedInstrumentals;
+
 const syncInstrumentalsFromFolder = async () => {
+  await purgeOrphanedInstrumentals();
+
   if (!fs.existsSync(INSTRU_DIRECTORY)) {
     return;
   }
@@ -114,12 +187,6 @@ const syncInstrumentalsFromFolder = async () => {
   if (files.length === 0) {
     return;
   }
-
-  await AudioTrack.deleteMany({
-    instrumental: true,
-    sourceType: 'folder',
-    sourceFileName: { $nin: files }
-  });
 
   const existingTracks = await AudioTrack.find({
     instrumental: true,
