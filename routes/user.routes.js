@@ -41,9 +41,13 @@ const safeResolveUserRegion = (user) => {
 const buildLeaderboardRow = (user, rank) => {
   const profile = user.profile || {};
   const stats = user.stats || {};
+  // Aggregation-pipeline results (sortBy=followers path below) are plain
+  // objects, not Mongoose documents — same toObject-guard pattern already
+  // used by social.service.js's compactUser for the same reason.
+  const source = typeof user.toObject === 'function' ? user.toObject() : user;
 
   return {
-    ...user.toObject(),
+    ...source,
     rank,
     region: safeResolveUserRegion(user),
     city: profile.city || null,
@@ -52,6 +56,7 @@ const buildLeaderboardRow = (user, rank) => {
     wins: Number(stats?.battles?.wins || 0),
     totalViews: Number(stats.totalViews || 0),
     totalLikes: Number(stats.totalLikes || 0),
+    followersCount: Array.isArray(stats.followers) ? stats.followers.length : 0,
   };
 };
 
@@ -353,15 +358,39 @@ router.get('/leaderboard', protect, buildRouteCache({ ttlMs: 15000 }), async (re
     }
 
     const match = { ...baseMatch, ...scopeMatch };
+    const sortBy = req.query.sortBy === 'followers' ? 'followers' : 'score';
 
-    const [total, pageOfUsers] = await Promise.all([
-      User.countDocuments(match),
-      User.find(match)
-        .select('-password')
-        .sort({ 'stats.score': -1, 'stats.battles.wins': -1, 'stats.totalViews': -1, createdAt: 1 })
-        .skip((safePage - 1) * safeLimit)
-        .limit(safeLimit),
-    ]);
+    let total;
+    let pageOfUsers;
+    if (sortBy === 'followers') {
+      // Sorting by follower count needs the array length, which a plain
+      // .find().sort() can't express — an aggregation is the contained
+      // exception here, everything else stays on the query-pushed-to-Mongo
+      // path described above.
+      const [aggResult] = await User.aggregate([
+        { $match: match },
+        { $addFields: { followersCount: { $size: { $ifNull: ['$stats.followers', []] } } } },
+        { $sort: { followersCount: -1, 'stats.score': -1, createdAt: 1 } },
+        { $project: { password: 0 } },
+        {
+          $facet: {
+            data: [{ $skip: (safePage - 1) * safeLimit }, { $limit: safeLimit }],
+            totalCount: [{ $count: 'count' }],
+          },
+        },
+      ]);
+      pageOfUsers = aggResult.data;
+      total = aggResult.totalCount[0]?.count || 0;
+    } else {
+      [total, pageOfUsers] = await Promise.all([
+        User.countDocuments(match),
+        User.find(match)
+          .select('-password')
+          .sort({ 'stats.score': -1, 'stats.battles.wins': -1, 'stats.totalViews': -1, createdAt: 1 })
+          .skip((safePage - 1) * safeLimit)
+          .limit(safeLimit),
+      ]);
+    }
 
     const rankOffset = (safePage - 1) * safeLimit;
     const pagedUsers = pageOfUsers.map((user, index) => buildLeaderboardRow(user, rankOffset + index + 1));

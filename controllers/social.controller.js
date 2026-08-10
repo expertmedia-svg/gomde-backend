@@ -1,8 +1,10 @@
 const SocialPost = require('../models/socialPost');
 const {
+  createAnnouncement,
   createSharePost,
   createStatusPost,
   fetchFollowingFeed,
+  fetchGlobalWallPosts,
   fetchWallPosts,
   serializePost,
 } = require('../services/social.service');
@@ -18,6 +20,47 @@ exports.getWall = async (req, res) => {
       skip: (page - 1) * limit,
     });
     res.json({ posts, currentPage: page, hasMore: posts.length === limit });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// Global community wall — every author, not scoped to one profile or one
+// viewer's following list. Distinct route from getWall (`/social/wall/:userId`).
+exports.getGlobalWall = async (req, res) => {
+  try {
+    const limit = Math.min(30, Math.max(1, Number(req.query.limit) || 18));
+    const page = Math.max(1, Number(req.query.page) || 1);
+    const posts = await fetchGlobalWallPosts({
+      viewerId: req.user?._id,
+      limit,
+      skip: (page - 1) * limit,
+    });
+    res.json({ posts, currentPage: page, hasMore: posts.length === limit });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.createGlobalAnnouncement = async (req, res) => {
+  try {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Only the GOMDE team can publish announcements' });
+    }
+
+    const text = req.body?.text?.toString().trim();
+    if (!text) {
+      return res.status(400).json({ message: 'Text is required' });
+    }
+
+    const post = await createAnnouncement({ authorId: req.user._id, text });
+    const hydrated = await SocialPost.findById(post._id)
+      .populate('author', 'username profile.avatar profile.city profile.neighborhood stats.score')
+      .populate('comments.user', 'username profile.avatar profile.city profile.neighborhood stats.score');
+
+    res.status(201).json(serializePost(hydrated, req.user._id));
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

@@ -30,7 +30,9 @@ const socialPostSchema = new mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['status', 'video', 'audio', 'battle', 'live', 'repost'],
+      // 'announcement' = admin-authored GOMDE news/highlights, shown pinned
+      // at the top of the global community wall (never on a personal wall).
+      enum: ['status', 'video', 'audio', 'battle', 'live', 'repost', 'announcement'],
       required: true,
       index: true,
     },

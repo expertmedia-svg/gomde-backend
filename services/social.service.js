@@ -196,6 +196,18 @@ const createStatusPost = async ({ authorId, text }) => {
   });
 };
 
+// Admin-only, same authoring gate as uploadInstrumental (studio.controller.js)
+// — enforced by the controller, not here. Kept as a distinct post type so
+// the global wall can pin these separately from ordinary status/repost posts.
+const createAnnouncement = async ({ authorId, text }) => {
+  return SocialPost.create({
+    author: authorId,
+    type: 'announcement',
+    targetType: 'status',
+    text: text?.trim() || '',
+  });
+};
+
 const syncPublicationPost = async ({ authorId, targetType, targetId, text = '' }) => {
   const targetPreview = await resolveTargetPreview({ targetType, targetId });
   if (!targetPreview) {
@@ -274,10 +286,38 @@ const fetchFollowingFeed = async ({ viewer, limit = 24, skip = 0 }) => {
   return posts.map((post) => serializePost(post, viewerDoc?._id || viewer));
 };
 
+// Global community wall: everyone's posts, not just one author (fetchWallPosts)
+// or one viewer's following list (fetchFollowingFeed). Admin `announcement`
+// posts are pinned at the top of page 1 only, so they don't get repeated on
+// every subsequent page as the viewer scrolls.
+const fetchGlobalWallPosts = async ({ viewerId = null, limit = 20, skip = 0 }) => {
+  const [announcements, posts] = await Promise.all([
+    skip === 0
+      ? SocialPost.find({ type: 'announcement', visibility: 'public' })
+          .populate('author', PUBLIC_USER_FIELDS)
+          .populate('comments.user', PUBLIC_USER_FIELDS)
+          .sort({ createdAt: -1 })
+          .limit(5)
+          .lean(false)
+      : Promise.resolve([]),
+    SocialPost.find({ type: { $ne: 'announcement' }, visibility: 'public' })
+      .populate('author', PUBLIC_USER_FIELDS)
+      .populate('comments.user', PUBLIC_USER_FIELDS)
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(limit)
+      .lean(false),
+  ]);
+
+  return [...announcements, ...posts].map((post) => serializePost(post, viewerId));
+};
+
 module.exports = {
+  createAnnouncement,
   createSharePost,
   createStatusPost,
   fetchFollowingFeed,
+  fetchGlobalWallPosts,
   fetchWallPosts,
   serializePost,
   syncPublicationPost,
