@@ -1,6 +1,6 @@
 const Video = require('../models/video');
 const Battle = require('../models/battle');
-const AudioTrack = require('../models/audiotrack');
+const AudioTrack = require('../models/audioTrack');
 const { toPublicMediaUrl } = require('../services/mediaStorage.service');
 
 exports.getSmartFeed = async (req, res) => {

@@ -1,4 +1,4 @@
-const AudioTrack = require('../models/audiotrack');
+const AudioTrack = require('../models/audioTrack');
 const path = require('path');
 const fs = require('fs');
 const { buildDisciplinePayload } = require('../constants/disciplines');

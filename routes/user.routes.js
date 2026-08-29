@@ -6,7 +6,7 @@ const { buildRouteCache } = require('../middleware/cache');
 const { buildActionLimiter } = require('../middleware/traffic');
 const User = require('../models/user');
 const Video = require('../models/video');
-const AudioTrack = require('../models/audiotrack');
+const AudioTrack = require('../models/audioTrack');
 const {
   normalizeLocationKey,
   resolveRegionFromCity,

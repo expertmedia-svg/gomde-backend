@@ -1,4 +1,4 @@
-const AudioTrack = require('../models/audiotrack');
+const AudioTrack = require('../models/audioTrack');
 const Battle = require('../models/battle');
 const SocialPost = require('../models/socialPost');
 const User = require('../models/user');
