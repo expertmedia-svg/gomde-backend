@@ -7,6 +7,7 @@ const {
   fetchGlobalWallPosts,
   fetchWallPosts,
   serializePost,
+  uploadStatusImage,
 } = require('../services/social.service');
 
 exports.getWall = async (req, res) => {
@@ -81,12 +82,15 @@ exports.getFollowingFeed = async (req, res) => {
 
 exports.createStatus = async (req, res) => {
   try {
-    const text = req.body?.text?.toString().trim();
-    if (!text) {
-      return res.status(400).json({ message: 'Text is required' });
+    const text = req.body?.text?.toString().trim() || '';
+    // A photo-only post (no caption) is a normal thing to allow, same as
+    // Facebook/Instagram — only reject if there's neither text nor image.
+    if (!text && !req.file) {
+      return res.status(400).json({ message: 'Text or image is required' });
     }
 
-    const post = await createStatusPost({ authorId: req.user._id, text });
+    const imageUrl = await uploadStatusImage({ req, file: req.file });
+    const post = await createStatusPost({ authorId: req.user._id, text, imageUrl });
     const hydrated = await SocialPost.findById(post._id)
       .populate('author', 'username profile.avatar profile.city profile.neighborhood stats.score')
       .populate('comments.user', 'username profile.avatar profile.city profile.neighborhood stats.score');

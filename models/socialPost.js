@@ -56,6 +56,14 @@ const socialPostSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.Mixed,
       default: null,
     },
+    // A directly-attached photo (compose-bar "Quoi de neuf" upload) —
+    // distinct from targetPreview, which references an existing
+    // video/audio/battle document rather than a raw uploaded file.
+    imageUrl: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     sourceKey: {
       type: String,
       unique: true,

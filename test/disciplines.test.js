@@ -8,8 +8,8 @@ const {
 
 test('normalizeDisciplineList maps required categories and aliases', () => {
   assert.deepEqual(
-    normalizeDisciplineList(['Rap', 'dancehall', 'one man show', 'tradi moderne']),
-    ['rap', 'dancehall', 'comedie', 'tradi-moderne']
+    normalizeDisciplineList(['Rap', 'dancehall', 'one man show', 'Théâtre', 'tradi moderne']),
+    ['rap', 'dancehall', 'humour', 'theatre', 'tradi-moderne']
   );
 });
 

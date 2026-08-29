@@ -144,7 +144,7 @@ uploadDirs.forEach(dir => {
 app.use('/uploads/instru', express.static(path.join(__dirname, 'uploads', 'instru'), {
   setHeaders: (res, filePath) => {
     res.setHeader('Content-Disposition', `inline; filename="${toSafeHeaderFilename(filePath)}"`);
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
   }
 }));
 app.use('/uploads/thumbnails', express.static(path.join(__dirname, 'uploads', 'thumbnails'), {
@@ -168,11 +168,15 @@ app.use('/uploads/thumbnails', express.static(path.join(__dirname, 'uploads', 't
 app.use('/uploads/videos', express.static(path.join(__dirname, 'uploads', 'videos'), {
   acceptRanges: true,
   setHeaders: (res, filePath) => {
-    res.setHeader('Cache-Control', 'public, max-age=3600');
+    res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     if (filePath.endsWith('.mp4')) {
       res.setHeader('Content-Type', 'video/mp4');
     } else if (filePath.endsWith('.webm')) {
       res.setHeader('Content-Type', 'video/webm');
+    } else if (filePath.endsWith('.m3u8')) {
+      res.setHeader('Content-Type', 'application/vnd.apple.mpegurl');
+    } else if (filePath.endsWith('.ts')) {
+      res.setHeader('Content-Type', 'video/mp2t');
     }
   },
   onError: (err, req, res) => {
@@ -264,6 +268,7 @@ const gomdeOrRoutes = require('./routes/gomdeOr.routes');
 const gocoRoutes = require('./routes/goco.routes');
 const socialRoutes = require('./routes/social.routes');
 const notificationRoutes = require('./routes/notification.routes');
+const reportRoutes = require('./routes/report.routes');
 const { storageSummary } = require('./services/mediaStorage.service');
 
 // Health check
@@ -400,6 +405,20 @@ app.use('/api/gomde-or', gomdeOrRoutes);
 app.use('/api/goco', gocoRoutes);
 app.use('/api/social', socialRoutes);
 app.use('/api/notifications', notificationRoutes);
+app.use('/api/reports', reportRoutes);
+
+// Admin web companion (React, built in ../frontend, base path '/gomde/' —
+// see frontend/vite.config.js). Served from this same backend/repo instead
+// of a separate hosting setup: the built dist/ output is copied into
+// public/gomde/ before deploying (same git repo, same `git pull` + pm2
+// restart flow already used for the API). The wildcard GET below is the SPA
+// fallback so client-side routes (e.g. /gomde/admin) still resolve on a
+// direct load/refresh instead of 404ing.
+const adminFrontendDir = path.join(__dirname, 'public', 'gomde');
+app.use('/gomde', express.static(adminFrontendDir));
+app.get('/gomde/*', (req, res) => {
+  res.sendFile(path.join(adminFrontendDir, 'index.html'));
+});
 
 // Socket.io for live battles
 require('./sockets/liveBattle.socket')(io);

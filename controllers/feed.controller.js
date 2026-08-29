@@ -15,9 +15,12 @@ exports.getSmartFeed = async (req, res) => {
     const userLocation = req.user?.profile?.city;
     
     // Pour toi is intentionally biased toward fresh and relevant content instead of raw popularity.
+    // type:'freestyle' excludes battle/duel entries — those belong only in
+    // the Duel flow (voting, results), not the main video feed.
     const candidateVideos = await Video.find({
       isPublished: true,
       status: 'ready',
+      type: 'freestyle',
       createdAt: { $gte: recentWindowStart },
     })
       .populate('user', 'username profile.avatar stats.score profile.city')
@@ -27,13 +30,13 @@ exports.getSmartFeed = async (req, res) => {
 
     const videos = candidateVideos.length >= parsedLimit
       ? candidateVideos
-      : await Video.find({ isPublished: true, status: 'ready' })
+      : await Video.find({ isPublished: true, status: 'ready', type: 'freestyle' })
         .populate('user', 'username profile.avatar stats.score profile.city')
         .sort({ createdAt: -1 })
         .limit(candidateLimit)
         .lean();
 
-    const totalVideos = await Video.countDocuments({ isPublished: true, status: 'ready' });
+    const totalVideos = await Video.countDocuments({ isPublished: true, status: 'ready', type: 'freestyle' });
     
     // Calculate personalized score and then paginate after ranking so the order differs from Tendance.
     const scoredVideos = videos.map(video => {
@@ -42,7 +45,6 @@ exports.getSmartFeed = async (req, res) => {
       const comments = Array.isArray(video.comments) ? video.comments.length : 0;
       const shares = video.shares || 0;
       
-      const battleBoost = video.battleId ? 90 : 0;
       const hoursSinceCreation = (Date.now() - new Date(video.createdAt)) / (1000 * 60 * 60);
       const freshnessBoost = Math.max(0, 220 - hoursSinceCreation * 7);
       const totalInteractions = likes + comments + shares;
@@ -61,7 +63,6 @@ exports.getSmartFeed = async (req, res) => {
         (views * 0.04) +
         (comments * 7) +
         (shares * 9) +
-        battleBoost +
         freshnessBoost +
         (engagementRate * 3.5) +
         creatorBoost +
@@ -117,7 +118,7 @@ exports.getTrending = async (req, res) => {
     const { page = 1, limit = 20 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
     
-    const videos = await Video.find({ isPublished: true, status: 'ready' })
+    const videos = await Video.find({ isPublished: true, status: 'ready', type: 'freestyle' })
       .populate('user', 'username profile.avatar profile.city')
       .sort({ views: -1, createdAt: -1 })
       .skip(skip)
@@ -131,7 +132,7 @@ exports.getTrending = async (req, res) => {
       thumbnailUrl: toPublicMediaUrl(req, video.thumbnailUrl)
     }));
 
-    const total = await Video.countDocuments({ isPublished: true, status: 'ready' });
+    const total = await Video.countDocuments({ isPublished: true, status: 'ready', type: 'freestyle' });
     
     res.json({
       videos: enrichedVideos,
@@ -155,7 +156,7 @@ exports.getLocalContent = async (req, res) => {
     
     // Use aggregation to filter by user location in DB instead of loading all videos
     const localVideos = await Video.aggregate([
-      { $match: { isPublished: true, status: 'ready' } },
+      { $match: { isPublished: true, status: 'ready', type: 'freestyle' } },
       { $lookup: { from: 'users', localField: 'user', foreignField: '_id', as: 'userDoc' } },
       { $unwind: '$userDoc' },
       { $match: { 'userDoc.profile.city': { $regex: new RegExp(`^${userLocation.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&')}$`, 'i') } } },
@@ -242,6 +243,7 @@ exports.getGomdezik = async (req, res) => {
         comments: recording.comments || [],
         shares: recording.shares || 0,
         views: recording.plays || 0,
+        reuseCount: recording.reuseCount || 0,
         type: 'audio',
         createdAt: recording.createdAt,
         isAudio: true,

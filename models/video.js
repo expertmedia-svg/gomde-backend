@@ -34,6 +34,11 @@ const videoSchema = new mongoose.Schema({
     required: false,
     default: ''
   },
+  renditions: {
+    low: { type: String, default: '' },
+    standard: { type: String, default: '' },
+  },
+  hlsUrl: { type: String, default: '' },
   // 'processing' while ffmpeg/storage work happens in the background after
   // upload; feed/list queries must filter on status:'ready' so in-flight or
   // failed uploads never leak into what users see.
@@ -84,6 +89,11 @@ const videoSchema = new mongoose.Schema({
   battleId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'Battle'
+  },
+  sourceAudioTrack: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'AudioTrack',
+    default: null,
   },
   isPublished: {
     type: Boolean,

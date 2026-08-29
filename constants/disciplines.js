@@ -3,7 +3,9 @@ const DISCIPLINE_REGISTRY = Object.freeze([
   Object.freeze({ slug: 'dancehall', label: 'Dancehall', aliases: ['shatta'] }),
   Object.freeze({ slug: 'reggae', label: 'Reggae', aliases: [] }),
   Object.freeze({ slug: 'tradi-moderne', label: 'Musique tradi-moderne', aliases: ['musique tradi moderne', 'tradimoderne', 'tradi moderne'] }),
-  Object.freeze({ slug: 'comedie', label: 'Comedie', aliases: ['comedy', 'one man show', 'humour'] }),
+  Object.freeze({ slug: 'theatre', label: 'Theatre', aliases: ['théâtre'] }),
+  Object.freeze({ slug: 'comedie', label: 'Comedie', aliases: ['comedy'] }),
+  Object.freeze({ slug: 'humour', label: 'Humour', aliases: ['one man show', 'stand up', 'stand-up'] }),
 ]);
 
 const DEFAULT_DISCIPLINE_SLUG = 'rap';

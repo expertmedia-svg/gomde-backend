@@ -2,6 +2,7 @@ const express = require('express');
 const { protect } = require('../middleware/auth');
 const { buildRouteCache } = require('../middleware/cache');
 const { buildActionLimiter } = require('../middleware/traffic');
+const { uploadImageWithLogging } = require('../middleware/upload');
 const {
   comment,
   createGlobalAnnouncement,
@@ -36,7 +37,9 @@ router.get('/wall', protect, buildRouteCache({ ttlMs: 12000 }), getGlobalWall);
 router.get('/wall/:userId', protect, buildRouteCache({ ttlMs: 12000 }), getWall);
 router.get('/feed/following', protect, buildRouteCache({ ttlMs: 10000 }), getFollowingFeed);
 router.get('/posts/:id', protect, buildRouteCache({ ttlMs: 5000 }), getPostById);
-router.post('/posts/status', protect, postWriteLimiter, createStatus);
+// Reuses the same image multer config as the Studio recording cover picker
+// (field name 'cover') — no new upload bucket needed for a status photo.
+router.post('/posts/status', protect, postWriteLimiter, uploadImageWithLogging, createStatus);
 router.post('/posts/announcement', protect, postWriteLimiter, createGlobalAnnouncement);
 router.post('/posts/share', protect, postWriteLimiter, shareToWall);
 router.post('/posts/:id/like', protect, postActionLimiter, toggleLike);

@@ -3,6 +3,7 @@ const Battle = require('../models/battle');
 const SocialPost = require('../models/socialPost');
 const User = require('../models/user');
 const Video = require('../models/video');
+const { uploadLocalFile } = require('./mediaStorage.service');
 
 const PUBLIC_USER_FIELDS = 'username profile.avatar profile.city profile.neighborhood stats.score';
 
@@ -39,6 +40,7 @@ const serializePost = (post, viewerId = null) => {
     targetType: source.targetType || 'status',
     targetId: source.targetId || '',
     targetPreview: source.targetPreview || null,
+    imageUrl: source.imageUrl || '',
     author: compactUser(source.author),
     likesCount: Array.isArray(source.likes) ? source.likes.length : 0,
     commentsCount: Array.isArray(source.comments) ? source.comments.length : 0,
@@ -187,13 +189,33 @@ const resolveTargetPreview = async ({ targetType, targetId }) => {
   return null;
 };
 
-const createStatusPost = async ({ authorId, text }) => {
+const createStatusPost = async ({ authorId, text, imageUrl = '' }) => {
   return SocialPost.create({
     author: authorId,
     type: 'status',
     targetType: 'status',
     text: text?.trim() || '',
+    imageUrl,
   });
+};
+
+// Uploads a "Quoi de neuf" attachment via the same uploadLocalFile helper
+// already used for Studio recording covers (studio.controller.js) — same
+// 'covers' bucket, no new storage bucket needed for a status photo.
+const uploadStatusImage = async ({ req, file }) => {
+  if (!file) {
+    return '';
+  }
+
+  const stored = await uploadLocalFile({
+    req,
+    localPath: file.path,
+    subdirectory: 'covers',
+    fileName: file.filename,
+    contentType: file.mimetype,
+  });
+
+  return stored.publicUrl || '';
 };
 
 // Admin-only, same authoring gate as uploadInstrumental (studio.controller.js)
@@ -300,7 +322,16 @@ const fetchGlobalWallPosts = async ({ viewerId = null, limit = 20, skip = 0 }) =
           .limit(5)
           .lean(false)
       : Promise.resolve([]),
-    SocialPost.find({ type: { $ne: 'announcement' }, visibility: 'public' })
+    // 'video'/'audio' posts are auto-mirrors of a publication (see
+    // syncPublicationPost) — the real video/audio already lives in the Feed
+    // (Video/AudioTrack collections), so the global wall excludes them to
+    // stop the same content showing up twice in two different places. They
+    // still appear on a profile's own wall (fetchWallPosts) as an activity
+    // log — only the global wall filters them out.
+    SocialPost.find({
+      type: { $nin: ['announcement', 'video', 'audio'] },
+      visibility: 'public',
+    })
       .populate('author', PUBLIC_USER_FIELDS)
       .populate('comments.user', PUBLIC_USER_FIELDS)
       .sort({ createdAt: -1 })
@@ -321,4 +352,5 @@ module.exports = {
   fetchWallPosts,
   serializePost,
   syncPublicationPost,
+  uploadStatusImage,
 };

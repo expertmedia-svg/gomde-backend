@@ -1,0 +1,14 @@
+# Methode 1: FallbackResource (Apache 2.2.16+)
+FallbackResource /gomde/index.html
+
+# Methode 2: mod_rewrite si FallbackResource ne marche pas
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /gomde/
+  RewriteCond %{REQUEST_FILENAME} !-f
+  RewriteCond %{REQUEST_FILENAME} !-d
+  RewriteRule ^ index.html [QSA,L]
+</IfModule>
+
+# Erreurs custom
+ErrorDocument 404 /gomde/index.html

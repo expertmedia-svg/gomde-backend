@@ -1,4 +1,5 @@
 const Video = require('../models/video');
+const AudioTrack = require('../models/audioTrack');
 const User = require('../models/user');
 const path = require('path');
 const { buildDisciplinePayload } = require('../constants/disciplines');
@@ -57,7 +58,7 @@ exports.uploadVideo = async (req, res) => {
       return res.status(400).json({ message: 'No video file uploaded' });
     }
 
-    const { title, description, tags, type, category, categories } = req.body;
+    const { title, description, tags, type, category, categories, sourceAudioTrackId } = req.body;
     const normalizedType = type === 'battle' ? 'battle' : 'freestyle';
     const normalizedCategories = buildDisciplinePayload(categories || category);
     const normalizedTitle = title?.trim() ||
@@ -78,7 +79,15 @@ exports.uploadVideo = async (req, res) => {
       videoUrl: '',
       status: 'processing',
       tags: tags ? tags.split(',') : [],
+      sourceAudioTrack:
+        typeof sourceAudioTrackId === 'string' && /^[a-f\d]{24}$/i.test(sourceAudioTrackId.trim())
+          ? sourceAudioTrackId.trim()
+          : null,
     });
+
+    if (video.sourceAudioTrack) {
+      await AudioTrack.findByIdAndUpdate(video.sourceAudioTrack, { $inc: { reuseCount: 1 } });
+    }
 
     res.status(202).json({
       ...video.toObject(),

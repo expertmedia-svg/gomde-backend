@@ -116,6 +116,10 @@ const audioTrackSchema = new mongoose.Schema({
     type: Number,
     default: 0
   },
+  reuseCount: {
+    type: Number,
+    default: 0
+  },
   comments: [{
     user: {
       type: mongoose.Schema.Types.ObjectId,

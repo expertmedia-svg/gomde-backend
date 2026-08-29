@@ -33,7 +33,7 @@ test('battle model normalizes categories and computes winner', async () => {
 
   const finalized = await battle.calculateWinner();
 
-  assert.deepEqual(finalized.categories, ['reggae', 'comedie']);
+  assert.deepEqual(finalized.categories, ['reggae', 'humour']);
   assert.equal(finalized.primaryCategory, 'reggae');
   assert.equal(String(finalized.winner), String(secondUserId));
   assert.equal(finalized.status, 'completed');

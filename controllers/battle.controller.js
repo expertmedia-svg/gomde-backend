@@ -67,6 +67,13 @@ exports.createBattle = async (req, res) => {
     const normalizedTitle = title?.trim() || 'Battle studio';
     const normalizedDescription = description?.trim() || undefined;
     const normalizedCategories = buildDisciplinePayload(categories || category);
+    const battleCategory = normalizedCategories.primaryCategory;
+    const creator = await User.findById(req.user._id).select('primaryDiscipline disciplines');
+    if (!userCanBattleInCategory(creator, battleCategory)) {
+      return res.status(400).json({
+        message: `Votre profil ne permet pas de lancer une battle dans la catégorie ${battleCategory}.`,
+      });
+    }
     const normalizedRules = {
       maxDuration: Number(rules?.maxDuration) > 0 ? Number(rules.maxDuration) : 60,
       allowInstrumentals: rules?.allowInstrumentals !== false,
@@ -98,6 +105,11 @@ exports.createBattle = async (req, res) => {
       challenger = await User.findById(normalizedChallengerId);
       if (!challenger) {
         return res.status(404).json({ message: 'Utilisateur défié introuvable' });
+      }
+      if (!userCanBattleInCategory(challenger, battleCategory)) {
+        return res.status(400).json({
+          message: 'Cet adversaire ne participe pas dans la même catégorie de battle.',
+        });
       }
       status = 'challenged';
     }
@@ -338,6 +350,19 @@ exports.joinBattle = async (req, res) => {
 
     const userId = req.user._id;
     const now = new Date();
+
+    const [openBattle, joiningUser] = await Promise.all([
+      Battle.findById(battleId).select('primaryCategory'),
+      User.findById(userId).select('primaryDiscipline disciplines'),
+    ]);
+    if (!openBattle) {
+      return res.status(404).json({ message: 'Battle introuvable' });
+    }
+    if (!userCanBattleInCategory(joiningUser, openBattle.primaryCategory)) {
+      return res.status(400).json({
+        message: `Cette battle est réservée aux artistes de la catégorie ${openBattle.primaryCategory}.`,
+      });
+    }
 
     // Atomic update: only succeed if status=pending, entries < 2, and user not already in
     const battle = await Battle.findOneAndUpdate(
@@ -650,4 +675,58 @@ exports.closeExpiredBattles = async () => {
     forfeited: forfeitBattles.length,
     completed: expiredVoteBattles.length
   };
+};
+
+// ── Seasonal game progression ───────────────────────────────────────
+exports.getMyProgression = async (req, res) => {
+  try {
+    const now = new Date();
+    const quarter = Math.floor(now.getUTCMonth() / 3);
+    const seasonStart = new Date(Date.UTC(now.getUTCFullYear(), quarter * 3, 1));
+    const seasonEnd = new Date(Date.UTC(now.getUTCFullYear(), quarter * 3 + 3, 1));
+    const userId = req.user._id;
+
+    const battles = await Battle.find({
+      createdAt: { $gte: seasonStart, $lt: seasonEnd },
+      'entries.user': userId,
+    }).select('status winner votes entries');
+
+    const completed = battles.filter((battle) => battle.status === 'completed');
+    const wins = completed.filter((battle) => battle.winner?.toString() === userId.toString()).length;
+    const votesReceived = battles.reduce(
+      (total, battle) => total + battle.votes.filter(
+        (voteItem) => voteItem.votedFor?.toString() === userId.toString(),
+      ).length,
+      0,
+    );
+    const score = Number(req.user.stats?.score || 0);
+    const division = score >= 5000 ? 'Faso Élite' : score >= 2500 ? 'Or' : score >= 1000 ? 'Argent' : 'Bronze';
+
+    res.json({
+      season: {
+        id: `${now.getUTCFullYear()}-S${quarter + 1}`,
+        label: `Saison ${quarter + 1} · ${now.getUTCFullYear()}`,
+        startsAt: seasonStart,
+        endsAt: seasonEnd,
+      },
+      xp: score,
+      division,
+      missions: [
+        { id: 'participate-3', label: 'Participer à 3 battles', progress: Math.min(battles.length, 3), target: 3, completed: battles.length >= 3 },
+        { id: 'win-1', label: 'Gagner une battle', progress: Math.min(wins, 1), target: 1, completed: wins >= 1 },
+        { id: 'votes-10', label: 'Recevoir 10 votes', progress: Math.min(votesReceived, 10), target: 10, completed: votesReceived >= 10 },
+      ],
+    });
+  } catch (error) {
+    return handleBattleError(res, error);
+  }
+};
+
+const userCanBattleInCategory = (user, category) => {
+  if (!user || !category) return false;
+  const disciplines = buildDisciplinePayload(
+    user.disciplines?.length ? user.disciplines : user.primaryDiscipline,
+    { fallback: [] },
+  ).categories;
+  return disciplines.includes(category);
 };

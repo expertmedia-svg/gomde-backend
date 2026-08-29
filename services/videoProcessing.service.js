@@ -39,11 +39,18 @@ async function processUploadedVideo({ video, req, sourcePath, description, tags 
         outputBasename,
       });
 
-      createdFiles.push(transcoded.outputPath, transcoded.thumbnailPath);
+      createdFiles.push(
+        transcoded.outputPath,
+        transcoded.lowOutputPath,
+        transcoded.thumbnailPath,
+        ...transcoded.hls.files.map((entry) => entry.filePath),
+      );
       await safeUnlink(sourcePath);
 
       asset = {
         videoFilename: transcoded.outputFilename,
+        lowVideoFilename: transcoded.lowOutputFilename,
+        hls: transcoded.hls,
         thumbnailFilename: transcoded.thumbnailFilename,
       };
     } catch (transcodeError) {
@@ -82,6 +89,8 @@ async function processUploadedVideo({ video, req, sourcePath, description, tags 
 
       asset = {
         videoFilename: sourceFilename,
+        lowVideoFilename: null,
+        hls: null,
         thumbnailFilename,
       };
     }
@@ -91,7 +100,7 @@ async function processUploadedVideo({ video, req, sourcePath, description, tags 
       localPath: resolveLocalUploadPath('videos', asset.videoFilename),
       subdirectory: 'videos',
       fileName: asset.videoFilename,
-      contentType: sourceExtension === '.webm' ? 'video/webm' : 'video/mp4',
+      contentType: 'video/mp4',
     });
     const storedThumbnail = asset.thumbnailFilename
       ? await uploadLocalFile({
@@ -102,11 +111,40 @@ async function processUploadedVideo({ video, req, sourcePath, description, tags 
           contentType: 'image/jpeg',
         })
       : null;
+    const storedLowVideo = asset.lowVideoFilename
+      ? await uploadLocalFile({
+          req,
+          localPath: resolveLocalUploadPath('videos', asset.lowVideoFilename),
+          subdirectory: 'videos',
+          fileName: asset.lowVideoFilename,
+          contentType: 'video/mp4',
+        })
+      : null;
+    let storedHlsMaster = null;
+    if (asset.hls) {
+      for (const hlsFile of asset.hls.files) {
+        const stored = await uploadLocalFile({
+          req,
+          localPath: hlsFile.filePath,
+          subdirectory: `videos/${asset.hls.relativeDirectory}`,
+          fileName: hlsFile.fileName,
+          contentType: hlsFile.fileName.endsWith('.m3u8')
+            ? 'application/vnd.apple.mpegurl'
+            : 'video/mp2t',
+        });
+        if (hlsFile.fileName === 'master.m3u8') storedHlsMaster = stored;
+      }
+    }
 
     const updatedVideo = await Video.findByIdAndUpdate(
       video._id,
       {
         videoUrl: storedVideo.publicUrl,
+        renditions: {
+          low: storedLowVideo?.publicUrl || storedVideo.publicUrl,
+          standard: storedVideo.publicUrl,
+        },
+        hlsUrl: storedHlsMaster?.publicUrl || '',
         videoPublicId: storedVideo.objectKey || asset.videoFilename,
         uploadChecksum: integrity?.checksum || '',
         uploadSizeBytes: integrity?.sizeBytes || 0,

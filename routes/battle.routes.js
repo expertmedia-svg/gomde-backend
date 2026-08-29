@@ -7,6 +7,7 @@ const {
   getBattles,
   getBattleById,
   getMyChallenges,
+  getMyProgression,
   acceptChallenge,
   refuseChallenge,
   joinBattle,
@@ -18,6 +19,7 @@ const {
 router.post('/', protect, createBattle);
 router.get('/', getBattles);
 router.get('/challenges', protect, getMyChallenges);
+router.get('/progression', protect, getMyProgression);
 router.get('/:id', getBattleById);
 router.post('/:id/accept', protect, acceptChallenge);
 router.post('/:id/refuse', protect, refuseChallenge);

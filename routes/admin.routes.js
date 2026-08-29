@@ -6,7 +6,9 @@ const {
   getAllUsers,
   updateUserRole,
   toggleUserStatus,
-  moderateVideo
+  moderateVideo,
+  getReports,
+  reviewReport
 } = require('../controllers/admin.controller');
 
 router.use(protect, admin);
@@ -16,5 +18,7 @@ router.get('/users', getAllUsers);
 router.put('/users/:id/role', updateUserRole);
 router.put('/users/:id/toggle', toggleUserStatus);
 router.put('/videos/:id/moderate', moderateVideo);
+router.get('/reports', getReports);
+router.patch('/reports/:id', reviewReport);
 
 module.exports = router;

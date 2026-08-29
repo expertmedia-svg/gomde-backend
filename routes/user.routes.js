@@ -253,11 +253,15 @@ const normalizeSavedContentEntries = (rawEntries) => {
 
 router.get('/', protect, buildRouteCache({ ttlMs: 10000 }), async (req, res) => {
   try {
-    const { page = 1, limit = 20, role, city, search } = req.query;
+    const { page = 1, limit = 20, role, city, search, category } = req.query;
     const query = { isActive: true };
 
     if (role) query.role = role;
     if (city) query['profile.city'] = city;
+    if (category) {
+      const normalizedCategory = buildDisciplinePayload(category, { fallback: [] }).categories[0];
+      if (normalizedCategory) query.disciplines = normalizedCategory;
+    }
     if (search) {
       const safe = search.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
       query.$or = [

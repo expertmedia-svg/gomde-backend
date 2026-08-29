@@ -1,0 +1,1 @@
+const t={minHeight:"42px",padding:"10px 14px",borderRadius:"16px",fontSize:"13px",fontWeight:700,boxShadow:"none"},o={...t,minWidth:"128px"},n={...t,minWidth:"136px"},i={alignItems:"center",gap:"12px"};export{n as a,i as b,t as c,o as s};

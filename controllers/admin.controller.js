@@ -1,6 +1,8 @@
 const User = require('../models/user');
 const Video = require('../models/video');
 const Battle = require('../models/battle');
+const Report = require('../models/report');
+const AudioTrack = require('../models/audioTrack');
 
 const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\\]\\\\]/g, '\\\\$&');
 
@@ -133,5 +135,47 @@ exports.moderateVideo = async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.getReports = async (req, res) => {
+  try {
+    const status = req.query.status || 'pending';
+    const query = status === 'all' ? {} : { status };
+    const reports = await Report.find(query)
+      .populate('reporter', 'username email')
+      .sort({ createdAt: -1 })
+      .limit(100)
+      .lean();
+    res.json({ reports });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Impossible de charger les signalements.' });
+  }
+};
+
+exports.reviewReport = async (req, res) => {
+  try {
+    const { status, action = 'none' } = req.body;
+    if (!['reviewing', 'resolved', 'dismissed'].includes(status)) {
+      return res.status(400).json({ message: 'Statut de modération invalide.' });
+    }
+    const report = await Report.findById(req.params.id);
+    if (!report) return res.status(404).json({ message: 'Signalement introuvable.' });
+
+    if (action === 'hide') {
+      if (report.targetType === 'video') {
+        await Video.findByIdAndUpdate(report.targetId, { isPublished: false });
+      } else if (report.targetType === 'audio') {
+        await AudioTrack.findByIdAndUpdate(report.targetId, { shareToCommunity: false, isPublic: false });
+      }
+    }
+
+    report.status = status;
+    await report.save();
+    res.json(report);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Modération du signalement impossible.' });
   }
 };
