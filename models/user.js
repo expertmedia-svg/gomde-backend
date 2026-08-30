@@ -18,10 +18,21 @@ const userSchema = new mongoose.Schema({
     lowercase: true,
     trim: true
   },
+  phone: {
+    type: String,
+    unique: true,
+    sparse: true,
+    trim: true,
+    select: false
+  },
   password: {
     type: String,
     required: [true, 'Password is required'],
     minlength: 6,
+    select: false
+  },
+  pinHash: {
+    type: String,
     select: false
   },
   role: {
@@ -138,8 +149,23 @@ userSchema.pre('save', async function(next) {
   }
 });
 
+userSchema.pre('save', async function(next) {
+  if (!this.isModified('pinHash') || !this.pinHash) return next();
+
+  try {
+    this.pinHash = await bcrypt.hash(this.pinHash, 10);
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 userSchema.methods.comparePassword = async function(candidatePassword) {
   return await bcrypt.compare(candidatePassword, this.password);
+};
+
+userSchema.methods.comparePin = async function(candidatePin) {
+  return Boolean(this.pinHash) && bcrypt.compare(candidatePin, this.pinHash);
 };
 
 userSchema.pre('validate', function normalizeUserDisciplines(next) {

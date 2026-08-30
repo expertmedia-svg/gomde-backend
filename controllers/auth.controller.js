@@ -2,6 +2,7 @@ const User = require('../models/user');
 const fs = require('fs');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const crypto = require('crypto');
 const { validationResult } = require('express-validator');
 const { buildDisciplinePayload } = require('../constants/disciplines');
 const { normalizeBurkinaProfile } = require('../services/location.service');
@@ -16,7 +17,7 @@ const generateToken = (id) => {
 const serializeUser = (user) => ({
   id: user._id,
   username: user.username,
-  email: user.email,
+  email: user.email?.endsWith('@gomde.local') ? null : user.email,
   role: user.role,
   profile: user.profile,
   stats: user.stats,
@@ -26,6 +27,13 @@ const serializeUser = (user) => ({
   primaryDiscipline: user.primaryDiscipline,
   disciplines: user.disciplines,
 });
+
+const normalizeBurkinaPhone = (value) => {
+  const digits = String(value || '').replace(/\D/g, '');
+  const local = digits.startsWith('226') ? digits.slice(3) : digits;
+  if (!/^\d{8}$/.test(local)) return null;
+  return `+226${local}`;
+};
 
 const parseProfilePayload = (rawProfile) => {
   if (!rawProfile) {
@@ -138,6 +146,8 @@ exports.register = async (req, res) => {
       region,
       primaryDiscipline,
       disciplines,
+      phone,
+      pin,
     } = req.body;
     const normalizedRole = (role === 'artist') ? 'artist' : 'user';
     const disciplinePayload = buildDisciplinePayload(
@@ -146,7 +156,20 @@ exports.register = async (req, res) => {
         : primaryDiscipline
     );
 
-    const userExists = await User.findOne({ $or: [{ email }, { username }] });
+    const normalizedPhone = normalizeBurkinaPhone(phone);
+    const normalizedEmail = email || (normalizedPhone
+      ? `${normalizedPhone.slice(1)}@gomde.local`
+      : null);
+    const passwordValue = password || (normalizedPhone
+      ? crypto.randomBytes(32).toString('hex')
+      : null);
+    const userExists = await User.findOne({
+      $or: [
+        ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+        ...(normalizedPhone ? [{ phone: normalizedPhone }] : []),
+        { username },
+      ],
+    });
     if (userExists) {
       return res.status(400).json({ message: 'User already exists' });
     }
@@ -155,8 +178,10 @@ exports.register = async (req, res) => {
 
     const user = await User.create({
       username,
-      email,
-      password,
+      email: normalizedEmail,
+      password: passwordValue,
+      phone: normalizedPhone || undefined,
+      pinHash: pin || undefined,
       role: normalizedRole,
       profile,
       primaryDiscipline: disciplinePayload.primaryCategory,
@@ -181,11 +206,17 @@ exports.register = async (req, res) => {
 
 exports.login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const { email, password, phone, pin } = req.body;
+    const normalizedPhone = normalizeBurkinaPhone(phone);
+    const usePhonePin = Boolean(normalizedPhone && pin);
+    const user = usePhonePin
+      ? await User.findOne({ phone: normalizedPhone }).select('+pinHash +phone')
+      : await User.findOne({ email }).select('+password');
+    const credentialsMatch = user && (usePhonePin
+      ? await user.comparePin(pin)
+      : await user.comparePassword(password));
 
-    const user = await User.findOne({ email }).select('+password');
-    
-    if (!user || !(await user.comparePassword(password))) {
+    if (!credentialsMatch) {
       return res.status(401).json({ message: 'Invalid credentials' });
     }
 
