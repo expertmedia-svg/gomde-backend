@@ -7,6 +7,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "diagnose:user-auth": "node scripts/diagnose-user-auth.js",
+    "reset:user-password": "node scripts/reset-user-password.js",
     "seed": "node seed.js",
     "smoke:storage": "node scripts/storage-smoke.js",
     "test": "node --test"
