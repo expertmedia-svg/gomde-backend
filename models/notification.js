@@ -20,7 +20,7 @@ const notificationSchema = new mongoose.Schema(
     },
     targetType: {
       type: String,
-      enum: ['video', 'audio', 'battle', 'user'],
+      enum: ['video', 'audio', 'battle', 'user', 'post'],
       required: true,
     },
     targetId: {

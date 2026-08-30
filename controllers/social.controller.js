@@ -1,4 +1,5 @@
 const SocialPost = require('../models/socialPost');
+const { notify } = require('../services/notification.service');
 const {
   createAnnouncement,
   createSharePost,
@@ -153,6 +154,16 @@ exports.toggleLike = async (req, res) => {
 
     await post.save();
 
+    if (liked) {
+      await notify({
+        recipient: post.author,
+        actor: req.user._id,
+        type: 'like',
+        targetType: 'post',
+        targetId: post._id,
+      });
+    }
+
     res.json({ liked, likes: post.likes.length });
   } catch (error) {
     console.error(error);
@@ -174,6 +185,14 @@ exports.comment = async (req, res) => {
 
     post.comments.push({ user: req.user._id, text });
     await post.save();
+
+    await notify({
+      recipient: post.author,
+      actor: req.user._id,
+      type: 'comment',
+      targetType: 'post',
+      targetId: post._id,
+    });
 
     const hydrated = await SocialPost.findById(post._id)
       .populate('author', 'username profile.avatar profile.city profile.neighborhood stats.score')

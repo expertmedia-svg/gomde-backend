@@ -137,15 +137,16 @@ videoSchema.methods.incrementViews = function() {
 };
 
 videoSchema.methods.toggleLike = async function(userId) {
-  const index = this.likes.indexOf(userId);
+  const normalizedUserId = String(userId);
+  const index = this.likes.findIndex((entry) => String(entry) === normalizedUserId);
   if (index === -1) {
     this.likes.push(userId);
     await this.save();
-    return { liked: true };
+    return { liked: true, likes: this.likes.length };
   } else {
     this.likes.splice(index, 1);
     await this.save();
-    return { liked: false };
+    return { liked: false, likes: this.likes.length };
   }
 };
 

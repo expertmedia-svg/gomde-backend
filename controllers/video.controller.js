@@ -125,6 +125,8 @@ exports.getVideos = async (req, res) => {
 
     const videos = await Video.find(query)
       .populate('user', 'username profile.avatar stats.score')
+      .populate('likes', 'username profile.avatar')
+      .populate('comments.user', 'username profile.avatar')
       .sort({ createdAt: -1 })
       .limit(limit * 1)
       .skip((page - 1) * limit);
@@ -147,6 +149,7 @@ exports.getVideoById = async (req, res) => {
   try {
     const video = await Video.findById(req.params.id)
       .populate('user', 'username profile.avatar stats.score')
+      .populate('likes', 'username profile.avatar')
       .populate('comments.user', 'username profile.avatar')
       .lean();
     
@@ -164,13 +167,15 @@ exports.getVideoById = async (req, res) => {
 
 exports.incrementVideoView = async (req, res) => {
   try {
-    const video = await Video.findById(req.params.id);
+    const video = await Video.findByIdAndUpdate(
+      req.params.id,
+      { $inc: { views: 1 } },
+      { new: true }
+    );
 
     if (!video) {
       return res.status(404).json({ message: 'Video not found' });
     }
-
-    await video.incrementViews();
 
     await User.findByIdAndUpdate(video.user, {
       $inc: { 'stats.totalViews': 1 }
@@ -187,7 +192,7 @@ exports.incrementVideoView = async (req, res) => {
       eventKey: `video_view:${video._id}:${req.user?._id || req.ip}:${new Date().toISOString().slice(0, 10)}`,
     });
 
-    res.json({ views: video.views });
+    res.json({ views: Number(video.views || 0) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ message: 'Server error' });

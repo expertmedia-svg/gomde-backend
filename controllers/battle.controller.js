@@ -626,7 +626,8 @@ exports.likeBattle = async (req, res) => {
       return res.status(404).json({ message: 'Battle not found' });
     }
 
-    const index = battle.likes.indexOf(req.user._id);
+    const currentUserId = String(req.user._id);
+    const index = battle.likes.findIndex((entry) => String(entry) === currentUserId);
     if (index === -1) {
       battle.likes.push(req.user._id);
     } else {
