@@ -1,4 +1,5 @@
 const Notification = require('../models/notification');
+const { sendPushNotification } = require('./pushNotification.service');
 
 /**
  * Creates a notification as a side effect of some other action (a like, a
@@ -18,13 +19,22 @@ const notify = async ({ recipient, actor = null, type, targetType, targetId }) =
       return null;
     }
 
-    return await Notification.create({
+    const notification = await Notification.create({
       recipient,
       actor,
       type,
       targetType,
       targetId,
     });
+    sendPushNotification({
+      recipient,
+      actor,
+      type,
+      targetType,
+      targetId,
+      notificationId: notification._id,
+    }).catch((error) => console.error('[push] send failed', error.message));
+    return notification;
   } catch (error) {
     console.error('[notification.service] failed to create notification', error);
     return null;

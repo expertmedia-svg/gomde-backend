@@ -1,6 +1,8 @@
 .env
 .env.*
 !.env.example
+*firebase-admin*.json
+*service-account*.json
 
 # Debug/test scratch output — never commit ad hoc test scripts or fixtures
 # generated while working on the audio pipeline.

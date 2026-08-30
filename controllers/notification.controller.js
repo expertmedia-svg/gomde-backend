@@ -1,4 +1,40 @@
 const Notification = require('../models/notification');
+const PushDevice = require('../models/pushDevice');
+
+exports.registerPushDevice = async (req, res) => {
+  try {
+    const token = String(req.body.token || '').trim();
+    if (token.length < 20 || token.length > 4096) {
+      return res.status(400).json({ message: 'Invalid push token' });
+    }
+    const platform = ['android', 'ios', 'web'].includes(req.body.platform)
+      ? req.body.platform
+      : 'unknown';
+    const deviceId = req.body.deviceId ? String(req.body.deviceId).slice(0, 200) : null;
+    await PushDevice.findOneAndUpdate(
+      { token },
+      { user: req.user._id, token, platform, deviceId, lastSeenAt: new Date() },
+      { upsert: true, new: true, setDefaultsOnInsert: true }
+    );
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+exports.unregisterPushDevice = async (req, res) => {
+  try {
+    const token = String(req.body.token || '').trim();
+    if (token) {
+      await PushDevice.deleteOne({ user: req.user._id, token });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
 
 exports.getNotifications = async (req, res) => {
   try {

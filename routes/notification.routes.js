@@ -6,8 +6,12 @@ const {
   getUnreadCount,
   markRead,
   markAllRead,
+  registerPushDevice,
+  unregisterPushDevice,
 } = require('../controllers/notification.controller');
 
+router.post('/devices', protect, registerPushDevice);
+router.delete('/devices', protect, unregisterPushDevice);
 router.get('/', protect, getNotifications);
 router.get('/unread-count', protect, getUnreadCount);
 router.patch('/read-all', protect, markAllRead);
