@@ -1,5 +1,5 @@
 const PushDevice = require('../models/pushDevice');
-const User = require('../models/User');
+const User = require('../models/user');
 
 let firebaseMessaging;
 let initializationAttempted = false;
